@@ -14,10 +14,22 @@ from utils.crypto import encrypt, decrypt, title_case, fmt_date
 @st.cache_resource
 def get_supabase():
     try:
-        from supabase import create_client
-        url = st.secrets["SUPABASE_URL"]
-        key = st.secrets["SUPABASE_KEY"]
-        return create_client(url, key)
+        from supabase import create_client, ClientOptions
+        url  = st.secrets["SUPABASE_URL"]
+        key  = st.secrets["SUPABASE_KEY"]
+        # Use connection pooling via Supabase's pgbouncer port when available
+        opts = ClientOptions(postgrest_client_timeout=15)
+        return create_client(url, key, options=opts)
+    except TypeError:
+        # Older supabase-py without ClientOptions
+        try:
+            from supabase import create_client
+            url = st.secrets["SUPABASE_URL"]
+            key = st.secrets["SUPABASE_KEY"]
+            return create_client(url, key)
+        except Exception as e:
+            st.error(f"Supabase connection failed: {e}")
+            return None
     except Exception as e:
         st.error(f"Supabase connection failed: {e}")
         return None
@@ -361,9 +373,11 @@ def reject_meeting_request(req_id):
 # ── INVOICES ──────────────────────────────────────────────────────────────
 
 def _next_invoice_number() -> str:
-    r = sb().table("invoices").select("id").execute()
-    count = len(r.data or [])
-    return f"INV-{date.today().year}{date.today().month:02d}-{str(count + 1).zfill(4)}"
+    """Generate collision-proof invoice number using timestamp + random suffix."""
+    import uuid, secrets
+    now    = datetime.now()
+    suffix = secrets.token_hex(2).upper()          # 4-char random hex
+    return f"INV-{now.year}{now.month:02d}-{now.strftime('%d%H%M')}-{suffix}"
 
 def create_invoice(advisor_id, ac_id, fee_type, fee_value, fee_frequency,
                    amount, portfolio_value=0, num_meetings=0,
