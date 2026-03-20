@@ -244,10 +244,18 @@ def should_refresh() -> bool:
         return False
 
 def is_market_open() -> bool:
-    now = datetime.now()
-    is_weekday = now.weekday() < 5
-    current_mins = now.hour * 60 + now.minute
-    return is_weekday and 9 * 60 + 15 <= current_mins <= 15 * 60 + 30
+    """NSE market hours: Mon-Fri 09:15 to 15:30 IST."""
+    try:
+        from datetime import timezone as tz
+        import zoneinfo
+        ist = zoneinfo.ZoneInfo("Asia/Kolkata")
+        now = datetime.now(ist)
+    except Exception:
+        # fallback: assume server is IST or close enough
+        now = datetime.now()
+    is_weekday    = now.weekday() < 5
+    current_mins  = now.hour * 60 + now.minute
+    return is_weekday and (9 * 60 + 15) <= current_mins <= (15 * 60 + 30)
 
 def auto_refresh_if_needed():
     """Called on app boot — refreshes if stale."""
