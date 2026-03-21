@@ -209,7 +209,14 @@ def render():
                         new_count = 0
                         # Batch-check existing symbols to avoid N×1 queries
                         try:
-                            ex_syms = {r["symbol"] for r in sb().table("assets").select("symbol").execute().data or []}
+                            # Paginate to get ALL existing symbols past 1000-row limit
+                            ex_syms = set()
+                            _pg = 0
+                            while True:
+                                _batch = sb().table("assets").select("symbol").range(_pg*1000,(_pg+1)*1000-1).execute().data or []
+                                ex_syms.update(r["symbol"] for r in _batch)
+                                if len(_batch) < 1000: break
+                                _pg += 1
                             new_assets = [
                                 {"symbol":sym,"name":nm,"asset_class":"Equity",
                                  "sub_class":_classify_equity(nm),"exchange":"NSE",
@@ -265,7 +272,14 @@ def render():
                         rows  = []
                         new_assets = []
                         try:
-                            ex_syms = {r["symbol"] for r in sb().table("assets").select("symbol").execute().data or []}
+                            # Paginate to get ALL existing symbols past 1000-row limit
+                            ex_syms = set()
+                            _pg = 0
+                            while True:
+                                _batch = sb().table("assets").select("symbol").range(_pg*1000,(_pg+1)*1000-1).execute().data or []
+                                ex_syms.update(r["symbol"] for r in _batch)
+                                if len(_batch) < 1000: break
+                                _pg += 1
                         except: ex_syms = set()
                         for i in range(len(df)):
                             sym = str(sym_c.iloc[i]).strip().upper()
