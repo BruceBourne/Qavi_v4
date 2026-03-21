@@ -6,6 +6,11 @@ import requests
 from datetime import datetime, date, timedelta
 from utils.crypto import encrypt, decrypt, title_case, fmt_date
 
+# ── CACHE BUST ────────────────────────────────────────────────────────────
+# Incremented after any market data upload so cached queries re-run immediately.
+def _bust() -> int:
+    return st.session_state.get("_cache_v", 0)
+
 # ── SUPABASE CLIENT ───────────────────────────────────────────────────────
 # Set in Streamlit secrets:
 #   SUPABASE_URL = "https://xxxx.supabase.co"
@@ -475,13 +480,13 @@ def update_invoice_status(inv_id, status):
 
 # ── MARKET DATA ───────────────────────────────────────────────────────────
 
-@st.cache_data(ttl=3600)  # cache 1 hour
-def get_indices():
+@st.cache_data(ttl=3600)
+def get_indices(_v=0):
     r = sb().table("indices").select("*").execute()
     return r.data or []
 
 @st.cache_data(ttl=3600)
-def get_all_prices_map():
+def get_all_prices_map(_v=0):
     r = sb().table("prices").select("symbol,close,change_pct,change_amt,open,high,low,prev_close,volume,price_date").order("price_date", desc=True).execute()
     seen = {}
     for row in (r.data or []):
@@ -490,13 +495,13 @@ def get_all_prices_map():
     return seen
 
 @st.cache_data(ttl=3600)
-def get_price_history(symbol: str, days: int = 365):
+def get_price_history(symbol: str, days: int = 365, _v=0):
     cutoff = str(date.today() - timedelta(days=days))
     r = sb().table("prices").select("price_date,close,open,high,low,volume").eq("symbol", symbol).gte("price_date", cutoff).order("price_date").execute()
     return r.data or []
 
 @st.cache_data(ttl=3600)
-def get_assets(asset_class=None, sub_class=None, search=None):
+def get_assets(asset_class=None, sub_class=None, search=None, _v=0):
     q = sb().table("assets").select("*").eq("is_active", True)
     if asset_class:
         q = q.eq("asset_class", asset_class)
@@ -509,7 +514,7 @@ def get_assets(asset_class=None, sub_class=None, search=None):
     return data
 
 @st.cache_data(ttl=3600)
-def get_mutual_funds(category=None, sub_category=None, search=None):
+def get_mutual_funds(category=None, sub_category=None, search=None, _v=0):
     q = sb().table("mutual_funds").select("*")
     if category:
         q = q.eq("category", category)
@@ -522,19 +527,19 @@ def get_mutual_funds(category=None, sub_category=None, search=None):
     return data
 
 @st.cache_data(ttl=3600)
-def get_mf_by_symbol(symbol):
+def get_mf_by_symbol(symbol, _v=0):
     r = sb().table("mutual_funds").select("*").eq("symbol", symbol).execute()
     return r.data[0] if r.data else None
 
 @st.cache_data(ttl=3600)
-def get_fixed_income(asset_class=None):
+def get_fixed_income(asset_class=None, _v=0):
     q = sb().table("fixed_income").select("*")
     if asset_class:
         q = q.eq("asset_class", asset_class)
     return q.execute().data or []
 
 @st.cache_data(ttl=3600)
-def get_commodities():
+def get_commodities(_v=0):
     r = sb().table("commodities").select("*").execute()
     return r.data or []
 
