@@ -308,8 +308,21 @@ def create_invoice(advisor_id, ac_id, fee_type, fee_value, fee_frequency,
     return inv_num
 
 def get_invoices_for_advisor(advisor_id):
-    r = sb().table("invoices").select("*").eq("advisor_id", advisor_id).order("created_at", desc=True).execute()
-    return r.data or []
+    # Paginate in case advisor has many invoices
+    data = []
+    page = 0
+    PAGE = 1000
+    while True:
+        batch = (sb().table("invoices").select("*")
+                 .eq("advisor_id", advisor_id)
+                 .order("created_at", desc=True)
+                 .range(page * PAGE, (page + 1) * PAGE - 1)
+                 .execute().data or [])
+        data.extend(batch)
+        if len(batch) < PAGE:
+            break
+        page += 1
+    return data
 
 def update_invoice_status(inv_id, status):
     sb().table("invoices").update({"status": status}).eq("id", inv_id).execute()
@@ -324,14 +337,22 @@ def get_indices():
 
 @st.cache_data(ttl=300)
 def get_all_prices_map():
-    """Returns {symbol: {close, change_pct, open, high, low, prev_close, volume, price_date}}"""
-    r = sb().table("prices").select(
-        "symbol,close,change_pct,open,high,low,prev_close,volume,price_date"
-    ).order("price_date", desc=True).execute()
-    seen = {}
-    for row in (r.data or []):
-        if row["symbol"] not in seen:
-            seen[row["symbol"]] = row
+    """Paginates in 1000-row batches — keeps most recent price per symbol."""
+    seen  = {}
+    page  = 0
+    PAGE  = 1000
+    while True:
+        batch = (sb().table("prices")
+                 .select("symbol,close,change_pct,open,high,low,prev_close,volume,price_date")
+                 .order("price_date", desc=True)
+                 .range(page * PAGE, (page + 1) * PAGE - 1)
+                 .execute().data or [])
+        for row in batch:
+            if row["symbol"] not in seen:
+                seen[row["symbol"]] = row
+        if len(batch) < PAGE:
+            break
+        page += 1
     return seen
 
 @st.cache_data(ttl=300)
@@ -342,10 +363,22 @@ def get_price_history(symbol: str, days: int = 365):
 
 @st.cache_data(ttl=300)
 def get_assets(asset_class=None, sub_class=None, search=None):
-    q = sb().table("assets").select("*").eq("is_active", True)
-    if asset_class: q = q.eq("asset_class", asset_class)
-    if sub_class:   q = q.eq("sub_class", sub_class)
-    data = q.order("symbol").execute().data or []
+    """Fetches all assets — paginates in 1000-row batches to bypass Supabase default limit."""
+    q_base = sb().table("assets").select("*").eq("is_active", True)
+    if asset_class: q_base = q_base.eq("asset_class", asset_class)
+    if sub_class:   q_base = q_base.eq("sub_class", sub_class)
+    q_base = q_base.order("symbol")
+
+    data  = []
+    page  = 0
+    PAGE  = 1000
+    while True:
+        batch = q_base.range(page * PAGE, (page + 1) * PAGE - 1).execute().data or []
+        data.extend(batch)
+        if len(batch) < PAGE:
+            break
+        page += 1
+
     if search:
         s = search.lower()
         data = [a for a in data if s in a["symbol"].lower() or s in a["name"].lower()]
@@ -353,10 +386,18 @@ def get_assets(asset_class=None, sub_class=None, search=None):
 
 @st.cache_data(ttl=300)
 def get_mutual_funds(category=None, sub_category=None, search=None):
-    q = sb().table("mutual_funds").select("*")
-    if category:     q = q.eq("category", category)
-    if sub_category: q = q.eq("sub_category", sub_category)
-    data = q.execute().data or []
+    q_base = sb().table("mutual_funds").select("*")
+    if category:     q_base = q_base.eq("category", category)
+    if sub_category: q_base = q_base.eq("sub_category", sub_category)
+    data  = []
+    page  = 0
+    PAGE  = 1000
+    while True:
+        batch = q_base.range(page * PAGE, (page + 1) * PAGE - 1).execute().data or []
+        data.extend(batch)
+        if len(batch) < PAGE:
+            break
+        page += 1
     if search:
         s = search.lower()
         data = [m for m in data if s in m["name"].lower() or s in m.get("fund_house","").lower()]
