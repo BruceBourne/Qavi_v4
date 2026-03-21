@@ -6,7 +6,7 @@ from utils.db import (get_client_advisors, get_advisor_clients, get_portfolios_f
                       get_private_portfolios, get_portfolio_holdings, get_transactions,
                       get_portfolio_by_id, add_holding, remove_holding,
                       get_assets, get_mutual_funds, get_fixed_income, get_commodities,
-                      get_asset_price, submit_pending_asset, get_pending_assets_for_user, _bust)
+                      get_asset_price, submit_pending_asset, get_pending_assets_for_user)
 from utils.crypto import inr, fmt_date, indian_format
 
 ASSET_CLASSES = {
@@ -20,18 +20,17 @@ ASSET_CLASSES = {
 
 def _all_assets_for_class(ac):
     """Return list of (symbol, name, interest_rate, tenure) for an asset class."""
-    v = _bust()
     if ac == "Equity":
-        return [(d["symbol"], d["name"], None, None) for d in get_assets("Equity", _v=v)]
+        return [(d["symbol"], d["name"], None, None) for d in get_assets("Equity")]
     if ac == "ETF":
-        return [(d["symbol"], d["name"], None, None) for d in get_assets("ETF", _v=v)]
+        return [(d["symbol"], d["name"], None, None) for d in get_assets("ETF")]
     if ac == "Mutual Fund":
-        return [(m["symbol"], m["name"], None, None) for m in get_mutual_funds(_v=v)]
+        return [(m["symbol"], m["name"], None, None) for m in get_mutual_funds()]
     if ac in ("Bond","Bank FD"):
         return [(f["symbol"], f["name"], f.get("interest_rate"), f.get("tenure_years"))
-                for f in get_fixed_income(ac, _v=v)]
+                for f in get_fixed_income(ac)]
     if ac == "Commodity":
-        return [(c["symbol"], c["name"], None, None) for c in get_commodities(_v=v)]
+        return [(c["symbol"], c["name"], None, None) for c in get_commodities()]
     return []
 
 def _search_assets(pairs, query):
@@ -234,7 +233,7 @@ def render():
                         if interest_rate is not None and interest_rate > 0:
                             note_str = f"rate:{interest_rate:.2f}%" + (f" | {notes}" if notes else "")
                         # Use sub-category from the selected asset
-                        sub = next((d.get("sub_class","") for d in get_assets(ac, _v=_bust()) if d["symbol"]==symbol), ASSET_CLASSES[ac]["sub"][0])
+                        sub = next((d.get("sub_class","") for d in get_assets(ac) if d["symbol"]==symbol), ASSET_CLASSES[ac]["sub"][0])
                         add_holding(pf_id, symbol, ac, sub, float(qty), utype, avg_cost, note_str)
                         st.success(f"Added {qty:g} of {symbol}"); st.rerun()
 
