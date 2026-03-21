@@ -2,7 +2,7 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 from utils.session import navigate
-from utils.db import sb
+from utils.db import sb, clear_market_cache
 from datetime import date, datetime
 import pandas as pd
 import time
@@ -101,9 +101,6 @@ def _upsert_batched(rows, table, conflict, prog_start, prog_end, prog_bar, label
         time.sleep(0.05)   # tiny breathing room between batches
     return count
 
-def _bust_cache():
-    """Increment session cache version so all @cache_data(_v=...) re-run."""
-    st.session_state["_cache_v"] = st.session_state.get("_cache_v", 0) + 1
 
 # ── PAGE ──────────────────────────────────────────────────────────────────
 
@@ -228,7 +225,7 @@ def render():
                             st.warning(f"Ticker registration: {e}")
 
                         prog.progress(1.0, text="Done ✓")
-                        _bust_cache()
+                        clear_market_cache()
                         st.success(
                             f"✅ {count:,} prices saved for {pd_s}. "
                             f"{f'{new_count} new tickers added.' if new_count else ''}"
@@ -299,7 +296,7 @@ def render():
                             for j in range(0, len(new_assets), 200):
                                 sb().table("assets").upsert(new_assets[j:j+200], on_conflict="symbol").execute()
                         prog.progress(1.0, text="Done ✓")
-                        _bust_cache()
+                        clear_market_cache()
                         st.success(f"✅ {count:,} ETF prices saved. {f'{len(new_assets)} new tickers.' if new_assets else ''}")
 
     # ── MF NAVs ───────────────────────────────────────────────────────────
@@ -360,7 +357,7 @@ def render():
                             frac = min((start+GROUP)/max(len(update_rows),1), 1.0)
                             prog.progress(frac, text=f"MF NAVs — {min(start+GROUP,len(update_rows))}/{len(update_rows)}")
                         prog.progress(1.0, text="Done ✓")
-                        _bust_cache()
+                        clear_market_cache()
                         st.success(f"✅ {count} MF NAVs updated. {f'({errs} skipped)' if errs else ''}")
 
     # ── FD RATES ─────────────────────────────────────────────────────────
@@ -400,7 +397,7 @@ def render():
                         except: pass
                         if i % 10 == 0: prog.progress(min((i+1)/total_r, 1.0), text=f"FD rates — {i+1}/{total_r}")
                     prog.progress(1.0, text="Done ✓")
-                    _bust_cache()
+                    clear_market_cache()
                     st.success(f"✅ {count} FD rates updated.")
 
         st.markdown("<br>**Manual update:**")
@@ -417,7 +414,7 @@ def render():
                     sb().table("fixed_income").update({
                         "interest_rate":new_rate,"last_updated":datetime.now().isoformat()
                     }).eq("symbol",fd_sym).execute()
-                    _bust_cache()
+                    clear_market_cache()
                     st.success(f"Updated {fd_sym} → {new_rate}%")
             else:
                 st.info("No FDs in database.")
@@ -459,7 +456,7 @@ def render():
                         except: pass
                         if i % 10 == 0: prog.progress(min((i+1)/total_r,1.0))
                     prog.progress(1.0, text="Done ✓")
-                    _bust_cache()
+                    clear_market_cache()
                     st.success(f"✅ {count} bond prices updated.")
 
     st.markdown("---")

@@ -13,623 +13,411 @@ import base64
 
 FEE_TYPES = {"one_time":"One-Time Fixed Fee","consultation":"Per Consultation","management":"AUM Management"}
 FEE_FREQS = {"annual":"Annual","quarterly":"Quarterly","monthly":"Monthly","daily":"Daily"}
+DEBT_CLASSES = {"Bond","Bank FD"}
 
-# ── ASSET CLASS CATEGORISATION ────────────────────────────────────────────
-EQUITY_CLASSES = {"Equity","ETF","Mutual Fund","Commodity"}   # price-based holdings
-DEBT_CLASSES   = {"Bond","Bank FD"}                           # interest/maturity-based
-
-def _is_debt(asset_class: str) -> bool:
-    return asset_class in DEBT_CLASSES
+def _is_debt(ac): return ac in DEBT_CLASSES
 
 # ── PERIOD COUNTING ───────────────────────────────────────────────────────
-def _next_boundary(d: date, frequency: str) -> date:
-    if frequency == "monthly":
-        m = d.month + 1; y = d.year + (m - 1) // 12; m = ((m - 1) % 12) + 1
+def _next_boundary(d, freq):
+    if freq == "monthly":
+        m = d.month+1; y = d.year+(m-1)//12; m = ((m-1)%12)+1
         return d.replace(year=y, month=m, day=1)
-    elif frequency == "quarterly":
-        m = d.month + 3; y = d.year + (m - 1) // 12; m = ((m - 1) % 12) + 1
+    elif freq == "quarterly":
+        m = d.month+3; y = d.year+(m-1)//12; m = ((m-1)%12)+1
         return d.replace(year=y, month=m, day=1)
-    elif frequency == "annual":
-        return d.replace(year=d.year + 1, month=1, day=1)
+    elif freq == "annual":
+        return d.replace(year=d.year+1, month=1, day=1)
     return d + timedelta(days=1)
 
-def _count_periods(d_from: date, d_to: date, frequency: str) -> int:
+def _count_periods(d_from, d_to, freq):
     if d_from >= d_to: return 0
-    if frequency == "daily": return (d_to - d_from).days
-    count = 0; cursor = d_from
-    while cursor < d_to:
-        count += 1; cursor = _next_boundary(cursor, frequency)
+    if freq == "daily": return (d_to-d_from).days
+    count=0; cursor=d_from
+    while cursor < d_to: count+=1; cursor=_next_boundary(cursor,freq)
     return count
 
-def _rate_per_period(annual_pct: float, frequency: str) -> float:
-    return annual_pct / 100.0 / {"annual":1,"quarterly":4,"monthly":12,"daily":365}.get(frequency, 12)
+def _rate_per_period(pct, freq):
+    return pct/100.0/{"annual":1,"quarterly":4,"monthly":12,"daily":365}.get(freq,12)
 
 # ── FEE CALCULATION ───────────────────────────────────────────────────────
-def calc_amount(fee_type, fee_value, frequency, portfolio_value,
-                num_meetings, d_from: date, d_to: date, holdings=None) -> float:
-    if fee_type == "one_time":
-        return round(float(fee_value), 2)
-    elif fee_type == "consultation":
-        return round(float(fee_value) * int(num_meetings), 2)
-    elif fee_type == "management":
-        if holdings is not None:
-            debt_val = non_debt_val = 0.0
+def calc_amount(fee_type, fee_value, freq, pf_value, num_meetings,
+                d_from, d_to, holdings=None):
+    if fee_type == "one_time":   return round(float(fee_value), 2)
+    if fee_type == "consultation": return round(float(fee_value)*int(num_meetings), 2)
+    if fee_type == "management":
+        if holdings:
+            dv = ndv = 0.0
             for h in holdings:
-                p, _ = get_asset_price(h["symbol"])
-                val  = h["quantity"] * (p or h["avg_cost"])
-                if _is_debt(h.get("asset_class","")): debt_val += val
-                else:                                  non_debt_val += val
-            days     = (d_to - d_from).days
-            debt_fee = round(debt_val * (float(fee_value)/100.0/365) * days, 2)
-            n        = _count_periods(d_from, d_to, frequency)
-            rate_p   = _rate_per_period(float(fee_value), frequency)
-            nd_fee   = round(non_debt_val * rate_p * n, 2)
-            return round(debt_fee + nd_fee, 2)
-        else:
-            n      = _count_periods(d_from, d_to, frequency)
-            rate_p = _rate_per_period(float(fee_value), frequency)
-            return round(float(portfolio_value) * rate_p * n, 2)
+                p,_ = get_asset_price(h["symbol"])
+                v   = h["quantity"]*(p or h["avg_cost"])
+                if _is_debt(h.get("asset_class","")): dv += v
+                else: ndv += v
+            days   = (d_to-d_from).days
+            df     = round(dv*(float(fee_value)/100.0/365)*days, 2)
+            n      = _count_periods(d_from, d_to, freq)
+            rp     = _rate_per_period(float(fee_value), freq)
+            ndf    = round(ndv*rp*n, 2)
+            return round(df+ndf, 2)
+        n  = _count_periods(d_from, d_to, freq)
+        rp = _rate_per_period(float(fee_value), freq)
+        return round(float(pf_value)*rp*n, 2)
     return 0.0
 
 def _pf_value_and_holdings(ac_id):
     total, all_h = 0.0, []
     for pf in get_portfolios_for_ac(ac_id):
         for h in get_portfolio_holdings(pf["id"]):
-            p, _ = get_asset_price(h["symbol"])
-            total += h["quantity"] * (p or h["avg_cost"])
+            p,_ = get_asset_price(h["symbol"])
+            total += h["quantity"]*(p or h["avg_cost"])
             all_h.append(h)
     return total, all_h
 
-# ── DEBT INSTRUMENT DETAILS ───────────────────────────────────────────────
-def _get_debt_info(symbol: str) -> dict:
-    """Fetch maturity, interest rate for a Bond/FD symbol."""
-    try:
-        fi = get_fixed_income()
-        for row in fi:
-            if row["symbol"] == symbol:
-                return {
-                    "rate":     row.get("interest_rate", 0),
-                    "maturity": row.get("maturity_date", "—"),
-                    "tenure":   row.get("tenure_years", "—"),
-                    "issuer":   row.get("issuer", "—"),
-                    "rating":   row.get("rating", "—"),
-                }
-    except Exception:
-        pass
-    return {"rate":0,"maturity":"—","tenure":"—","issuer":"—","rating":"—"}
-
-# ── HOLDING NOTE PARSING (to get stored interest rate) ────────────────────
-def _note_rate(notes: str) -> float | None:
-    """Extract rate:X.XX% from holding notes if advisor stored it."""
+def _note_rate(notes):
     if not notes: return None
     for part in notes.split("|"):
-        part = part.strip()
-        if part.startswith("rate:"):
-            try: return float(part[5:].replace("%","").strip())
+        p = part.strip()
+        if p.startswith("rate:"):
+            try: return float(p[5:].replace("%","").strip())
             except: pass
     return None
 
+def _get_fi_info(symbol):
+    try:
+        for row in get_fixed_income():
+            if row["symbol"] == symbol:
+                return row.get("interest_rate",0), row.get("maturity_date","—"), row.get("tenure_years","—")
+    except: pass
+    return 0, "—", "—"
+
 # ── INVOICE HTML ──────────────────────────────────────────────────────────
+# Single consistent margin used BOTH in browser and in print: 14mm all sides on A4 landscape.
+# The .page div mirrors that margin so browser view looks identical to print.
+
 def _invoice_html(inv, adv_user, client):
-    # Contact info
     adv_name  = title_case(adv_user.get("full_name") or adv_user.get("username",""))
     dec_adv   = decrypt_user(adv_user) if adv_user else {}
     adv_phone = dec_adv.get("phone","") or "—"
     adv_addr  = dec_adv.get("address","") or "—"
     cl_name   = title_case(client.get("client_name",""))
     cl_phone  = client.get("client_phone","") or "—"
-    cl_addr   = "—"
 
-    # Collect all holdings split by equity vs debt
-    eq_holdings   = []   # (symbol, asset_class, qty, buy_cost, cur_price, pnl, pnl_pct)
-    debt_holdings = []   # (symbol, asset_class, qty, face_val, interest_rate, maturity)
+    eq_h, debt_h = [], []
     total_eq_buy = total_eq_cur = 0.0
-    total_debt_buy = total_debt_cur = 0.0
+    total_db_buy = total_db_cur = 0.0
 
     for pf in get_portfolios_for_ac(inv["advisor_client_id"]):
         for h in get_portfolio_holdings(pf["id"]):
-            p, _    = get_asset_price(h["symbol"])
-            cur_p   = p or h["avg_cost"]
-            buy_val = h["quantity"] * h["avg_cost"]
-            cur_val = h["quantity"] * cur_p
-            pnl     = cur_val - buy_val
-            pnl_pct = ((cur_p - h["avg_cost"]) / h["avg_cost"] * 100) if h["avg_cost"] else 0
-            ac      = h.get("asset_class","")
-
+            p,_   = get_asset_price(h["symbol"])
+            cp    = p or h["avg_cost"]
+            bv    = h["quantity"] * h["avg_cost"]
+            cv    = h["quantity"] * cp
+            pnl   = cv - bv
+            ppct  = ((cp-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0
+            ac    = h.get("asset_class","")
             if _is_debt(ac):
-                total_debt_buy += buy_val
-                total_debt_cur += cur_val
-                di   = _get_debt_info(h["symbol"])
-                rate = _note_rate(h.get("notes","")) or di["rate"]
-                debt_holdings.append({
-                    "symbol":   h["symbol"],
-                    "ac":       ac,
-                    "qty":      h["quantity"],
-                    "invested": buy_val,
-                    "cur_val":  cur_val,
-                    "rate":     rate,
-                    "maturity": di["maturity"],
-                    "issuer":   di["issuer"],
-                    "rating":   di["rating"],
-                })
+                total_db_buy += bv; total_db_cur += cv
+                rate, mat, _ = _get_fi_info(h["symbol"])
+                rate = _note_rate(h.get("notes","")) or rate
+                mat_s = fmt_date(mat) if mat and mat not in ("—","N/A","") else "—"
+                debt_h.append((h["symbol"], ac, h["quantity"], bv, rate, mat_s))
             else:
-                total_eq_buy += buy_val
-                total_eq_cur += cur_val
-                eq_holdings.append({
-                    "symbol":  h["symbol"],
-                    "ac":      ac,
-                    "qty":     h["quantity"],
-                    "buy":     h["avg_cost"],
-                    "cur":     cur_p,
-                    "pnl":     pnl,
-                    "pnl_pct": pnl_pct,
-                    "buy_val": buy_val,
-                    "cur_val": cur_val,
-                })
+                total_eq_buy += bv; total_eq_cur += cv
+                eq_h.append((h["symbol"], ac, h["quantity"], h["avg_cost"], cp, pnl, ppct, bv, cv))
 
-    has_equity = len(eq_holdings) > 0
-    has_debt   = len(debt_holdings) > 0
-    show_combined = has_equity and has_debt
+    has_eq   = bool(eq_h)
+    has_debt = bool(debt_h)
+    both     = has_eq and has_debt
 
-    # ── EQUITY TABLE ──────────────────────────────────────────────────────
-    eq_table_html = ""
-    if has_equity:
-        eq_rows = ""
-        for h in sorted(eq_holdings, key=lambda x: -x["cur_val"]):
-            pc   = "#15803d" if h["pnl"] >= 0 else "#b91c1c"
-            sign = "+" if h["pnl"] >= 0 else ""
-            eq_rows += (
-                f"<tr>"
-                f"<td class='tl fw'>{h['symbol']}</td>"
-                f"<td class='tl gr'>{h['ac']}</td>"
-                f"<td class='tc'>{h['qty']:g}</td>"
-                f"<td class='tr'>₹{indian_format(h['buy'])}</td>"
-                f"<td class='tr'>₹{indian_format(h['cur'])}</td>"
-                f"<td class='tr' style='color:{pc};font-weight:600'>"
-                f"₹{indian_format(abs(h['pnl']))}&nbsp;"
-                f"<span class='sm'>{sign}{h['pnl_pct']:.1f}%</span></td>"
-                f"</tr>"
-            )
-        eq_pnl  = total_eq_cur - total_eq_buy
-        eq_pct  = (eq_pnl/total_eq_buy*100) if total_eq_buy else 0
-        tpc_eq  = "#15803d" if eq_pnl >= 0 else "#b91c1c"
-        tsign_eq = "+" if eq_pnl >= 0 else ""
-        eq_table_html = f"""
-        <div class="sec" style="margin-top:10px">
-            Equity &amp; Market Holdings &nbsp;·&nbsp;
-            <span style="font-weight:600">₹{indian_format(total_eq_cur)}</span>
-        </div>
-        <table class="ht">
-          <thead><tr>
-            <th class="hl">Symbol</th>
-            <th class="hl">Asset Class</th>
-            <th>Qty</th>
-            <th>Purchase Cost</th>
-            <th>Closing Price</th>
-            <th>P&amp;L</th>
-          </tr></thead>
-          <tbody>
-            {eq_rows}
-            <tr class="tot">
-              <td class="tl" colspan="2"><strong>Equity / Market Total</strong></td>
-              <td class="tc">—</td>
-              <td class="tr">₹{indian_format(total_eq_buy)}</td>
-              <td class="tr">₹{indian_format(total_eq_cur)}</td>
-              <td class="tr" style="color:{tpc_eq}">
-                ₹{indian_format(abs(eq_pnl))}&nbsp;({tsign_eq}{eq_pct:.2f}%)
-              </td>
-            </tr>
-          </tbody>
-        </table>"""
+    # Build equity table HTML
+    eq_tbl = ""
+    if has_eq:
+        rows = ""
+        for sym,ac,qty,buy,cur,pnl,ppct,bv,cv in sorted(eq_h, key=lambda x:-x[8]):
+            pc   = "#15803d" if pnl>=0 else "#b91c1c"
+            sign = "+" if pnl>=0 else ""
+            rows += (f"<tr>"
+                     f"<td class='tl fw'>{sym}</td><td class='tl gr'>{ac}</td>"
+                     f"<td class='tc'>{qty:g}</td>"
+                     f"<td class='tr'>₹{indian_format(buy)}</td>"
+                     f"<td class='tr'>₹{indian_format(cur)}</td>"
+                     f"<td class='tr' style='color:{pc};font-weight:600'>"
+                     f"₹{indian_format(abs(pnl))}&nbsp;<span class='sm'>{sign}{ppct:.1f}%</span></td>"
+                     f"</tr>")
+        ep    = total_eq_cur - total_eq_buy
+        epct  = (ep/total_eq_buy*100) if total_eq_buy else 0
+        tpc_e = "#15803d" if ep>=0 else "#b91c1c"
+        tsg_e = "+" if ep>=0 else ""
+        eq_tbl = (f'<p class="sec-lbl">Equity &amp; Market Holdings</p>'
+                  f'<table class="ht"><thead><tr>'
+                  f'<th class="hl">Symbol</th><th class="hl">Asset Class</th>'
+                  f'<th>Qty</th><th>Purchase Cost</th><th>Closing Price</th><th>P&amp;L</th>'
+                  f'</tr></thead><tbody>{rows}'
+                  f'<tr class="tot"><td class="tl" colspan="2"><b>Equity Total</b></td>'
+                  f'<td class="tc">—</td>'
+                  f'<td class="tr">₹{indian_format(total_eq_buy)}</td>'
+                  f'<td class="tr">₹{indian_format(total_eq_cur)}</td>'
+                  f'<td class="tr" style="color:{tpc_e}">₹{indian_format(abs(ep))}&nbsp;({tsg_e}{epct:.2f}%)</td>'
+                  f'</tr></tbody></table>')
 
-    # ── DEBT TABLE ────────────────────────────────────────────────────────
-    debt_table_html = ""
+    # Build debt table HTML — no rating or issuer columns
+    debt_tbl = ""
     if has_debt:
-        d_rows = ""
-        for h in sorted(debt_holdings, key=lambda x: -x["cur_val"]):
-            mat = fmt_date(h["maturity"]) if h["maturity"] and h["maturity"] not in ("—","N/A","") else "—"
-            d_rows += (
-                f"<tr>"
-                f"<td class='tl fw'>{h['symbol']}</td>"
-                f"<td class='tl gr'>{h['ac']}</td>"
-                f"<td class='tc'>{h['qty']:g}</td>"
-                f"<td class='tr'>₹{indian_format(h['invested'])}</td>"
-                f"<td class='tr' style='color:#15803d;font-weight:600'>{h['rate']:.2f}% p.a.</td>"
-                f"<td class='tr'>{h['issuer']}</td>"
-                f"<td class='tc' style='color:#64748b'>{h['rating']}</td>"
-                f"<td class='tr'>{mat}</td>"
-                f"</tr>"
-            )
-        debt_table_html = f"""
-        <div class="sec" style="margin-top:10px">
-            Debt &amp; Fixed Income Holdings &nbsp;·&nbsp;
-            <span style="font-weight:600">₹{indian_format(total_debt_cur)}</span>
-        </div>
-        <table class="ht">
-          <thead><tr>
-            <th class="hl">Symbol</th>
-            <th class="hl">Type</th>
-            <th>Qty / Amount</th>
-            <th>Invested</th>
-            <th>Interest Rate</th>
-            <th>Issuer</th>
-            <th>Rating</th>
-            <th>Maturity</th>
-          </tr></thead>
-          <tbody>
-            {d_rows}
-            <tr class="tot">
-              <td class="tl" colspan="3"><strong>Debt / Fixed Income Total</strong></td>
-              <td class="tr">₹{indian_format(total_debt_buy)}</td>
-              <td colspan="4" class="tl" style="color:#64748b;font-size:.7rem">
-                See fee details for debt accrual calculation
-              </td>
-            </tr>
-          </tbody>
-        </table>"""
+        rows = ""
+        for sym,ac,qty,invested,rate,mat in sorted(debt_h, key=lambda x:-x[3]):
+            rows += (f"<tr>"
+                     f"<td class='tl fw'>{sym}</td><td class='tl gr'>{ac}</td>"
+                     f"<td class='tc'>{qty:g}</td>"
+                     f"<td class='tr'>₹{indian_format(invested)}</td>"
+                     f"<td class='tr' style='color:#15803d;font-weight:600'>{rate:.2f}% p.a.</td>"
+                     f"<td class='tc'>{mat}</td>"
+                     f"</tr>")
+        debt_tbl = (f'<p class="sec-lbl">Debt &amp; Fixed Income Holdings</p>'
+                    f'<table class="ht"><thead><tr>'
+                    f'<th class="hl">Symbol</th><th class="hl">Type</th>'
+                    f'<th>Qty / Amount</th><th>Invested</th>'
+                    f'<th>Interest Rate</th><th>Maturity</th>'
+                    f'</tr></thead><tbody>{rows}'
+                    f'<tr class="tot"><td class="tl" colspan="3"><b>Debt Total</b></td>'
+                    f'<td class="tr">₹{indian_format(total_db_buy)}</td>'
+                    f'<td colspan="2" class="tl" style="color:#94a3b8;font-size:.7rem">'
+                    f'Interest accruing daily</td>'
+                    f'</tr></tbody></table>')
 
-    # ── COMBINED SUMMARY (only when both types present) ───────────────────
-    combined_html = ""
-    if show_combined:
-        grand_buy = total_eq_buy + total_debt_buy
-        grand_cur = total_eq_cur + total_debt_cur
-        grand_pnl = grand_cur - grand_buy
-        grand_pct = (grand_pnl/grand_buy*100) if grand_buy else 0
-        tpc_g     = "#15803d" if grand_pnl >= 0 else "#b91c1c"
-        tsign_g   = "+" if grand_pnl >= 0 else ""
-        combined_html = f"""
-        <div class="sec" style="margin-top:10px">Portfolio Total</div>
-        <table class="ht">
-          <thead><tr>
-            <th class="hl">Category</th>
-            <th>Invested</th>
-            <th>Current Value</th>
-            <th>P&amp;L / Return</th>
-          </tr></thead>
-          <tbody>
-            <tr>
-              <td class="tl fw">Equity &amp; Market</td>
-              <td class="tr">₹{indian_format(total_eq_buy)}</td>
-              <td class="tr">₹{indian_format(total_eq_cur)}</td>
-              <td class="tr" style="color:{("#15803d" if total_eq_cur>=total_eq_buy else "#b91c1c")};font-weight:600">
-                ₹{indian_format(abs(total_eq_cur-total_eq_buy))}
-                &nbsp;({("+" if total_eq_cur>=total_eq_buy else "")}{((total_eq_cur-total_eq_buy)/total_eq_buy*100 if total_eq_buy else 0):.2f}%)
-              </td>
-            </tr>
-            <tr>
-              <td class="tl fw">Debt &amp; Fixed Income</td>
-              <td class="tr">₹{indian_format(total_debt_buy)}</td>
-              <td class="tr">₹{indian_format(total_debt_cur)}</td>
-              <td class="tr" style="color:#64748b">Interest accruing</td>
-            </tr>
-            <tr class="tot">
-              <td class="tl"><strong>Grand Total</strong></td>
-              <td class="tr">₹{indian_format(grand_buy)}</td>
-              <td class="tr">₹{indian_format(grand_cur)}</td>
-              <td class="tr" style="color:{tpc_g}">
-                ₹{indian_format(abs(grand_pnl))}&nbsp;({tsign_g}{grand_pct:.2f}%)
-              </td>
-            </tr>
-          </tbody>
-        </table>"""
+    # Combined summary — only when both present
+    combined_tbl = ""
+    if both:
+        grand_b = total_eq_buy + total_db_buy
+        grand_c = total_eq_cur + total_db_cur
+        grand_p = grand_c - grand_b
+        gpct    = (grand_p/grand_b*100) if grand_b else 0
+        tpc_g   = "#15803d" if grand_p>=0 else "#b91c1c"
+        tsg_g   = "+" if grand_p>=0 else ""
+        eq_p    = total_eq_cur - total_eq_buy
+        eq_pct  = (eq_p/total_eq_buy*100) if total_eq_buy else 0
+        tpc_eq  = "#15803d" if eq_p>=0 else "#b91c1c"
+        tsg_eq  = "+" if eq_p>=0 else ""
+        combined_tbl = (
+            f'<p class="sec-lbl">Portfolio Total</p>'
+            f'<table class="ht"><thead><tr>'
+            f'<th class="hl">Category</th><th>Invested</th><th>Current Value</th><th>P&amp;L / Return</th>'
+            f'</tr></thead><tbody>'
+            f'<tr><td class="tl fw">Equity &amp; Market</td>'
+            f'<td class="tr">₹{indian_format(total_eq_buy)}</td>'
+            f'<td class="tr">₹{indian_format(total_eq_cur)}</td>'
+            f'<td class="tr" style="color:{tpc_eq};font-weight:600">₹{indian_format(abs(eq_p))}&nbsp;({tsg_eq}{eq_pct:.2f}%)</td>'
+            f'</tr>'
+            f'<tr><td class="tl fw">Debt &amp; Fixed Income</td>'
+            f'<td class="tr">₹{indian_format(total_db_buy)}</td>'
+            f'<td class="tr">₹{indian_format(total_db_cur)}</td>'
+            f'<td class="tr" style="color:#64748b">Interest accruing</td>'
+            f'</tr>'
+            f'<tr class="tot"><td class="tl"><b>Grand Total</b></td>'
+            f'<td class="tr">₹{indian_format(grand_b)}</td>'
+            f'<td class="tr">₹{indian_format(grand_c)}</td>'
+            f'<td class="tr" style="color:{tpc_g}">₹{indian_format(abs(grand_p))}&nbsp;({tsg_g}{gpct:.2f}%)</td>'
+            f'</tr></tbody></table>'
+        )
 
-    # ── PORTFOLIO SUMMARY BOX ─────────────────────────────────────────────
-    total_buy = total_eq_buy + total_debt_buy
-    total_cur = total_eq_cur + total_debt_cur
+    # Portfolio summary box
+    total_buy = total_eq_buy + total_db_buy
+    total_cur = total_eq_cur + total_db_cur
     total_pnl = total_cur - total_buy
     total_pct = (total_pnl/total_buy*100) if total_buy else 0
-    tpc  = "#15803d" if total_pnl >= 0 else "#b91c1c"
-    tsign = "+" if total_pnl >= 0 else ""
+    tpc  = "#15803d" if total_pnl>=0 else "#b91c1c"
+    tsign = "+" if total_pnl>=0 else ""
 
-    # ── FEE DETAIL ROWS ───────────────────────────────────────────────────
+    # Fee detail
     fee_type = inv["fee_type"]
     fee_val  = inv["fee_value"]
     fee_freq = FEE_FREQS.get(inv.get("fee_frequency","annual"),"Annual")
     pf_val   = inv.get("portfolio_value",0)
-    period_row = ""
+    period_r = ""
     if inv.get("period_from") and inv.get("period_to"):
-        period_row = (f"<tr><td class='lbl'>Period</td>"
-                      f"<td>{fmt_date(inv['period_from'])} to {fmt_date(inv['period_to'])}</td></tr>")
+        period_r = (f"<tr><td class='lbl'>Period</td>"
+                    f"<td>{fmt_date(inv['period_from'])} to {fmt_date(inv['period_to'])}</td></tr>")
     if fee_type == "management":
-        fee_detail = (
-            f"<tr><td class='lbl'>Fee Type</td><td>{FEE_TYPES['management']}</td></tr>"
-            f"<tr><td class='lbl'>Annual Rate</td><td>{fee_val}%</td></tr>"
-            f"<tr><td class='lbl'>Billing Frequency</td><td>{fee_freq}</td></tr>"
-            f"<tr><td class='lbl'>Portfolio Value</td><td>₹{indian_format(pf_val)}</td></tr>"
-            f"{period_row}"
-        )
+        fee_rows = (f"<tr><td class='lbl'>Fee Type</td><td>{FEE_TYPES['management']}</td></tr>"
+                    f"<tr><td class='lbl'>Annual Rate</td><td>{fee_val}%</td></tr>"
+                    f"<tr><td class='lbl'>Billing Frequency</td><td>{fee_freq}</td></tr>"
+                    f"<tr><td class='lbl'>Portfolio Value</td><td>₹{indian_format(pf_val)}</td></tr>"
+                    f"{period_r}")
     elif fee_type == "consultation":
-        fee_detail = (
-            f"<tr><td class='lbl'>Fee Type</td><td>{FEE_TYPES['consultation']}</td></tr>"
-            f"<tr><td class='lbl'>Rate per Meeting</td><td>₹{indian_format(fee_val)}</td></tr>"
-            f"<tr><td class='lbl'>Meetings Billed</td><td>{inv.get('num_meetings',0)}</td></tr>"
-            f"{period_row}"
-        )
+        fee_rows = (f"<tr><td class='lbl'>Fee Type</td><td>{FEE_TYPES['consultation']}</td></tr>"
+                    f"<tr><td class='lbl'>Rate per Meeting</td><td>₹{indian_format(fee_val)}</td></tr>"
+                    f"<tr><td class='lbl'>Meetings Billed</td><td>{inv.get('num_meetings',0)}</td></tr>"
+                    f"{period_r}")
     else:
-        fee_detail = (
-            f"<tr><td class='lbl'>Fee Type</td><td>{FEE_TYPES['one_time']}</td></tr>"
-            f"{period_row}"
-        )
-    notes_html = (f"<p style='margin-top:.45rem;font-size:.73rem;color:#64748b'>{inv['notes']}</p>"
+        fee_rows = (f"<tr><td class='lbl'>Fee Type</td><td>{FEE_TYPES['one_time']}</td></tr>"
+                    f"{period_r}")
+    notes_html = (f"<p style='margin-top:.4rem;font-size:.72rem;color:#64748b'>{inv['notes']}</p>"
                   if inv.get("notes") else "")
 
-    # ── FULL HTML ─────────────────────────────────────────────────────────
-    # @page: A4 landscape = 297mm × 210mm
-    # Normal print margins: 12mm all sides — matches Word/PDF defaults
-    # Body max-width constraint keeps content from stretching on screen too
+    # MARGIN NOTE:
+    # @page margin = 14mm all sides on A4 landscape (297×210mm).
+    # .page padding = 14mm mirrors this exactly so browser view matches print.
+    # No separate screen vs print sizing — what you see is what prints.
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>{inv['invoice_number']}</title>
 <style>
-/* ── PRINT SETUP ── */
 @page {{
   size: A4 landscape;
-  margin: 12mm 14mm 12mm 14mm;   /* top right bottom left — normal print margins */
+  margin: 14mm;
 }}
-
-/* ── RESET ── */
 *, *::before, *::after {{ margin:0; padding:0; box-sizing:border-box; }}
-
-/* ── BASE ── */
 body {{
-  font-family: 'Segoe UI', Arial, Helvetica, sans-serif;
+  font-family: 'Segoe UI', Arial, sans-serif;
   font-size: 11px;
   color: #1e293b;
   background: #fff;
   line-height: 1.5;
 }}
-
-/* Screen wrapper — keeps it readable in browser too */
+/* .page padding = @page margin so browser and print are identical */
 .page {{
-  max-width: 260mm;              /* ~A4 landscape content width at 12mm margins */
-  margin: 0 auto;
-  padding: 10mm;                 /* breathing room in browser, ignored in print */
+  width: 269mm;          /* 297mm - 2×14mm */
+  margin: 14mm auto;
+  padding: 0;
   background: #fff;
 }}
-
 @media print {{
-  .page {{ padding: 0; max-width: 100%; }}
+  .page {{ width:100%; margin:0; }}
+  body  {{ margin:0; }}
 }}
 
-/* ── HEADER ── */
-.hdr {{
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  padding-bottom: 10px;
-  border-bottom: 2px solid #1e293b;
-  margin-bottom: 14px;
-}}
-.brand {{ font-size: 2rem; font-weight: 900; letter-spacing: .1em; line-height: 1; font-variant: small-caps; }}
-.brand-sub {{ font-size: .58rem; color: #94a3b8; letter-spacing: .18em; text-transform: uppercase; margin-top: .18rem; }}
-.inv-meta {{ text-align: right; }}
-.inv-num {{ font-size: .9rem; font-weight: 700; margin-bottom: .35rem; }}
-.dt {{ border-collapse: collapse; }}
-.dt td {{ padding: 1.5px 0; font-size: .72rem; color: #64748b; }}
-.dl {{ text-align: right; padding-right: 4px; white-space: nowrap; }}
-.dv {{ text-align: right; white-space: nowrap; font-weight: 500; color: #1e293b; }}
+/* HEADER */
+.hdr {{ display:flex; justify-content:space-between; align-items:flex-start;
+        padding-bottom:10px; border-bottom:2px solid #1e293b; margin-bottom:13px; }}
+.brand {{ font-size:2rem; font-weight:900; letter-spacing:.1em; line-height:1; font-variant:small-caps; }}
+.brand-sub {{ font-size:.57rem; color:#94a3b8; letter-spacing:.18em; text-transform:uppercase; margin-top:.18rem; }}
+.inv-meta {{ text-align:right; }}
+.inv-num {{ font-size:.88rem; font-weight:700; margin-bottom:.3rem; }}
+.dt {{ border-collapse:collapse; }}
+.dt td {{ padding:1.5px 0; font-size:.71rem; color:#64748b; }}
+.dl {{ text-align:right; padding-right:4px; white-space:nowrap; }}
+.dv {{ text-align:right; white-space:nowrap; font-weight:500; color:#1e293b; }}
 
-/* ── TWO COLUMN GRID ── */
-.two {{ display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px; }}
+/* GRID */
+.two {{ display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px; }}
 
-/* ── PARTY CARDS ── */
-.party {{
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 5px;
-  padding: 8px 12px;
-}}
-.plbl {{ font-size: .55rem; font-weight: 700; color: #94a3b8; letter-spacing: .14em; text-transform: uppercase; margin-bottom: 3px; }}
-.pname {{ font-size: .87rem; font-weight: 700; margin-bottom: 2px; }}
-.pdet {{ font-size: .72rem; color: #64748b; line-height: 1.65; }}
+/* PARTY */
+.party {{ background:#f8fafc; border:1px solid #e2e8f0; border-radius:5px; padding:8px 12px; }}
+.plbl {{ font-size:.54rem; font-weight:700; color:#94a3b8; letter-spacing:.13em; text-transform:uppercase; margin-bottom:3px; }}
+.pname {{ font-size:.86rem; font-weight:700; margin-bottom:2px; }}
+.pdet {{ font-size:.71rem; color:#64748b; line-height:1.65; }}
 
-/* ── AMOUNT BOX ── */
-.amt-box {{
-  background: linear-gradient(135deg, #1e293b, #2d4060);
-  color: #fff;
-  border-radius: 7px;
-  padding: 11px 18px;
-  margin-bottom: 12px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}}
-.amt-lbl {{ font-size: .58rem; opacity: .68; letter-spacing: .12em; text-transform: uppercase; margin-bottom: .15rem; }}
-.amt-val {{ font-size: 1.75rem; font-weight: 800; letter-spacing: -.01em; }}
-.amt-due {{ font-size: .68rem; opacity: .58; margin-top: .15rem; }}
-.amt-right {{ text-align: right; font-size: .72rem; opacity: .82; line-height: 1.75; }}
+/* AMOUNT BOX */
+.amt-box {{ background:linear-gradient(135deg,#1e293b,#2d4060); color:#fff;
+            border-radius:7px; padding:11px 18px; margin-bottom:12px;
+            display:flex; justify-content:space-between; align-items:center; }}
+.amt-lbl {{ font-size:.57rem; opacity:.68; letter-spacing:.12em; text-transform:uppercase; margin-bottom:.14rem; }}
+.amt-val {{ font-size:1.75rem; font-weight:800; }}
+.amt-due {{ font-size:.68rem; opacity:.58; margin-top:.14rem; }}
+.amt-right {{ text-align:right; font-size:.71rem; opacity:.82; line-height:1.7; }}
 
-/* ── SECTION TITLE ── */
-.sec {{
-  font-size: .57rem;
-  font-weight: 700;
-  color: #94a3b8;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  margin-bottom: 5px;
-  padding-bottom: 3px;
-  border-bottom: 1px solid #e2e8f0;
+/* SECTION LABEL */
+.sec-lbl {{
+  font-size:.57rem; font-weight:700; color:#94a3b8; letter-spacing:.1em;
+  text-transform:uppercase; margin:10px 0 5px 0; padding-bottom:3px;
+  border-bottom:1px solid #e2e8f0;
 }}
 
-/* ── FEE / META TABLE ── */
-.ft {{ width: 100%; border-collapse: collapse; font-size: .77rem; }}
-.ft td {{ padding: 3px 0; border-bottom: 1px solid #f1f5f9; vertical-align: top; }}
-.lbl {{ color: #94a3b8; width: 40%; padding-right: 8px; }}
+/* FEE TABLE */
+.ft {{ width:100%; border-collapse:collapse; font-size:.76rem; }}
+.ft td {{ padding:3px 0; border-bottom:1px solid #f1f5f9; vertical-align:top; }}
+.lbl {{ color:#94a3b8; width:40%; padding-right:8px; }}
 
-/* ── HOLDINGS TABLE ── */
-table.ht {{
-  width: 100%;
-  border-collapse: collapse;
-  font-size: .74rem;
-  margin-top: 4px;
-  margin-bottom: 8px;
-}}
-table.ht thead tr {{ background: #1e293b; color: #fff; }}
-table.ht th {{
-  padding: 5px 8px;
-  font-weight: 600;
-  font-size: .61rem;
-  letter-spacing: .04em;
-  text-align: center;
-}}
-table.ht th.hl {{ text-align: left; }}
-table.ht td {{
-  padding: 5px 8px;
-  border-bottom: 1px solid #f1f5f9;
-  vertical-align: middle;
-}}
-table.ht tr:nth-child(even) {{ background: #f8fafc; }}
-table.ht tr:hover {{ background: #f0f9ff; }}
+/* HOLDINGS TABLE */
+table.ht {{ width:100%; border-collapse:collapse; font-size:.73rem; margin-bottom:8px; }}
+table.ht thead tr {{ background:#1e293b; color:#fff; -webkit-print-color-adjust:exact; print-color-adjust:exact; }}
+table.ht th {{ padding:5px 8px; font-weight:600; font-size:.61rem; letter-spacing:.04em; text-align:center; }}
+table.ht th.hl {{ text-align:left; }}
+table.ht td {{ padding:5px 8px; border-bottom:1px solid #f1f5f9; vertical-align:middle; }}
+table.ht tr:nth-child(even) {{ background:#f8fafc; }}
+.tl {{ text-align:left; }} .tc {{ text-align:center; }} .tr {{ text-align:right; }}
+.fw {{ font-weight:600; }} .gr {{ color:#64748b; }} .sm {{ font-size:.66rem; margin-left:2px; }}
+.tot td {{ background:#eff6ff!important; font-weight:700; color:#1e293b; font-size:.74rem;
+           border-top:1.5px solid #bfdbfe; -webkit-print-color-adjust:exact; print-color-adjust:exact; }}
 
-/* TD alignment helpers */
-.tl {{ text-align: left; }}
-.tc {{ text-align: center; }}
-.tr {{ text-align: right; }}
-.fw {{ font-weight: 600; }}
-.gr {{ color: #64748b; }}
-.sm {{ font-size: .67rem; display: inline-block; margin-left: 2px; }}
-
-/* Total rows */
-.tot td {{
-  background: #eff6ff !important;
-  font-weight: 700;
-  color: #1e293b;
-  font-size: .75rem;
-  border-top: 1.5px solid #bfdbfe;
-}}
-
-/* ── FOOTER ── */
-.ftr {{
-  margin-top: 10px;
-  padding-top: 8px;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}}
-.ftr-brand {{ font-size: .87rem; font-weight: 900; letter-spacing: .1em; color: #94a3b8; font-variant: small-caps; }}
-.ftr-note {{ font-size: .61rem; color: #cbd5e1; text-align: right; line-height: 1.6; }}
-
-/* ── PRINT HELPERS ── */
-@media print {{
-  table.ht {{ page-break-inside: avoid; }}
-  .amt-box {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-  table.ht thead tr {{ -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-}}
+/* FOOTER */
+.ftr {{ margin-top:10px; padding-top:8px; border-top:1px solid #e2e8f0;
+        display:flex; justify-content:space-between; align-items:center; }}
+.ftr-brand {{ font-size:.86rem; font-weight:900; letter-spacing:.1em; color:#94a3b8; font-variant:small-caps; }}
+.ftr-note {{ font-size:.6rem; color:#cbd5e1; text-align:right; line-height:1.6; }}
 </style>
 </head>
 <body>
 <div class="page">
 
-<!-- HEADER -->
 <div class="hdr">
-  <div>
-    <div class="brand">QAVI</div>
-    <div class="brand-sub">Wealth Management</div>
-  </div>
+  <div><div class="brand">QAVI</div><div class="brand-sub">Wealth Management</div></div>
   <div class="inv-meta">
     <div class="inv-num">{inv['invoice_number']}</div>
     <table class="dt">
-      <tr>
-        <td class="dl">Date</td>
-        <td style="padding:0 5px;color:#94a3b8">:</td>
-        <td class="dv">{fmt_date(inv['invoice_date'])}</td>
-      </tr>
-      <tr>
-        <td class="dl">Payment Due</td>
-        <td style="padding:0 5px;color:#94a3b8">:</td>
-        <td class="dv">{fmt_date(inv['due_date'])}</td>
-      </tr>
+      <tr><td class="dl">Date</td><td style="padding:0 5px;color:#94a3b8">:</td><td class="dv">{fmt_date(inv['invoice_date'])}</td></tr>
+      <tr><td class="dl">Payment Due</td><td style="padding:0 5px;color:#94a3b8">:</td><td class="dv">{fmt_date(inv['due_date'])}</td></tr>
     </table>
   </div>
 </div>
 
-<!-- PARTIES -->
 <div class="two">
   <div class="party">
-    <div class="plbl">From</div>
-    <div class="pname">{adv_name}</div>
-    <div class="pdet">
-      Phone: {adv_phone}<br>
-      {adv_addr}
-    </div>
+    <div class="plbl">From</div><div class="pname">{adv_name}</div>
+    <div class="pdet">Phone: {adv_phone}<br>{adv_addr}</div>
   </div>
   <div class="party">
-    <div class="plbl">Bill To</div>
-    <div class="pname">{cl_name}</div>
-    <div class="pdet">
-      Phone: {cl_phone}<br>
-      {cl_addr}
-    </div>
+    <div class="plbl">Bill To</div><div class="pname">{cl_name}</div>
+    <div class="pdet">Phone: {cl_phone}</div>
   </div>
 </div>
 
-<!-- AMOUNT BOX -->
 <div class="amt-box">
   <div>
     <div class="amt-lbl">Amount Due</div>
     <div class="amt-val">₹{indian_format(inv['amount'])}</div>
     <div class="amt-due">Due by {fmt_date(inv['due_date'])}</div>
   </div>
-  <div class="amt-right">
-    {FEE_TYPES.get(fee_type,'')}<br>
+  <div class="amt-right">{FEE_TYPES.get(fee_type,'')}<br>
     <span style="opacity:.65">{fee_freq if fee_type=='management' else ''}</span>
   </div>
 </div>
 
-<!-- FEE + PORTFOLIO SUMMARY -->
 <div class="two">
   <div>
-    <div class="sec">Fee Details</div>
-    <table class="ft">
-      <tbody>{fee_detail}</tbody>
-    </table>
+    <p class="sec-lbl" style="margin-top:0">Fee Details</p>
+    <table class="ft"><tbody>{fee_rows}</tbody></table>
     {notes_html}
   </div>
   <div>
-    <div class="sec">Portfolio Summary</div>
-    <table class="ft">
-      <tbody>
-        <tr><td class="lbl">Total Invested</td><td>₹{indian_format(total_buy)}</td></tr>
-        <tr><td class="lbl">Current Value</td><td>₹{indian_format(total_cur)}</td></tr>
-        <tr>
-          <td class="lbl">Overall P&amp;L</td>
-          <td style="color:{tpc};font-weight:600">
-            ₹{indian_format(abs(total_pnl))} ({tsign}{total_pct:.2f}%)
-          </td>
-        </tr>
-        {"<tr><td class='lbl'>Equity Value</td><td>₹" + indian_format(total_eq_cur) + "</td></tr>" if show_combined else ""}
-        {"<tr><td class='lbl'>Debt Value</td><td>₹" + indian_format(total_debt_cur) + "</td></tr>" if show_combined else ""}
-      </tbody>
-    </table>
+    <p class="sec-lbl" style="margin-top:0">Portfolio Summary</p>
+    <table class="ft"><tbody>
+      <tr><td class="lbl">Total Invested</td><td>₹{indian_format(total_buy)}</td></tr>
+      <tr><td class="lbl">Current Value</td><td>₹{indian_format(total_cur)}</td></tr>
+      <tr><td class="lbl">Overall P&amp;L</td>
+          <td style="color:{tpc};font-weight:600">₹{indian_format(abs(total_pnl))} ({tsign}{total_pct:.2f}%)</td></tr>
+      {"<tr><td class='lbl'>Equity Value</td><td>₹" + indian_format(total_eq_cur) + "</td></tr>" if both else ""}
+      {"<tr><td class='lbl'>Debt Value</td><td>₹" + indian_format(total_db_cur) + "</td></tr>" if both else ""}
+    </tbody></table>
   </div>
 </div>
 
-<!-- HOLDINGS — as of date -->
-<p style="font-size:.6rem;color:#94a3b8;margin:2px 0 4px;letter-spacing:.05em">
+<p style="font-size:.58rem;color:#94a3b8;letter-spacing:.05em;margin:2px 0 0 0">
   HOLDINGS AS OF {fmt_date(str(date.today())).upper()}
 </p>
 
-{eq_table_html}
-{debt_table_html}
-{combined_html}
+{eq_tbl}
+{debt_tbl}
+{combined_tbl}
 
-<!-- FOOTER -->
 <div class="ftr">
-  <div>
-    <div class="ftr-brand">◈ QAVI</div>
-    <div style="font-size:.6rem;color:#cbd5e1">Generated {fmt_date(str(date.today()))}</div>
+  <div><div class="ftr-brand">◈ QAVI</div>
+    <div style="font-size:.59rem;color:#cbd5e1">Generated {fmt_date(str(date.today()))}</div>
   </div>
-  <div class="ftr-note">
-    Computer generated document.<br>
-    For queries contact your advisor.
-  </div>
+  <div class="ftr-note">Computer generated document.<br>For queries contact your advisor.</div>
 </div>
 
-</div><!-- /page -->
+</div>
 </body>
 </html>"""
 
@@ -657,8 +445,8 @@ def render():
             paid   = sum(i["amount"] for i in invoices if i["status"]=="paid")
             unpaid = sum(i["amount"] for i in invoices if i["status"]=="unpaid")
             m1,m2,m3 = st.columns(3)
-            m1.metric("Total", len(invoices))
-            m2.metric("Collected", inr(paid))
+            m1.metric("Total",       len(invoices))
+            m2.metric("Collected",   inr(paid))
             m3.metric("Outstanding", inr(unpaid))
             st.markdown("<br>", unsafe_allow_html=True)
 
@@ -677,9 +465,11 @@ def render():
 
                     b1,b2,b3,b4 = st.columns(4)
                     if inv["status"]=="unpaid":
-                        if b1.button("✅ Mark Paid",  key=f"mp_{inv['id']}", use_container_width=True): update_invoice_status(inv["id"],"paid"); st.rerun()
+                        if b1.button("✅ Mark Paid",  key=f"mp_{inv['id']}", use_container_width=True):
+                            update_invoice_status(inv["id"],"paid"); st.rerun()
                     else:
-                        if b1.button("↩ Unpaid",     key=f"mu_{inv['id']}", use_container_width=True): update_invoice_status(inv["id"],"unpaid"); st.rerun()
+                        if b1.button("↩ Unpaid",     key=f"mu_{inv['id']}", use_container_width=True):
+                            update_invoice_status(inv["id"],"unpaid"); st.rerun()
 
                     html_c = _invoice_html(inv, advisor or {}, client)
                     b64    = base64.b64encode(html_c.encode()).decode()
@@ -702,30 +492,28 @@ def render():
         if not clients:
             st.info("No clients yet."); return
 
-        cl_id = st.selectbox("Client", [c["id"] for c in clients],
-                             format_func=lambda x: title_case(next(c["client_name"] for c in clients if c["id"]==x)))
-        client  = next(c for c in clients if c["id"]==cl_id)
-        pf_val, pf_holdings = _pf_value_and_holdings(cl_id)
+        cl_id  = st.selectbox("Client", [c["id"] for c in clients],
+                              format_func=lambda x: title_case(next(c["client_name"] for c in clients if c["id"]==x)))
+        client = next(c for c in clients if c["id"]==cl_id)
+        pf_val, pf_h = _pf_value_and_holdings(cl_id)
         num_mtg = get_meeting_count_completed(cl_id)
 
-        debt_val     = sum(h["quantity"]*(get_asset_price(h["symbol"])[0] or h["avg_cost"])
-                          for h in pf_holdings if _is_debt(h.get("asset_class","")))
-        non_debt_val = pf_val - debt_val
-
-        info_parts = [f"Total AUM: ₹{indian_format(pf_val)}"]
-        if debt_val > 0: info_parts.append(f"Debt: ₹{indian_format(debt_val)}")
-        if non_debt_val > 0: info_parts.append(f"Market: ₹{indian_format(non_debt_val)}")
-        info_parts.append(f"Meetings: {num_mtg}")
-        st.markdown(f'<p style="font-size:.82rem;color:#8892AA">{" · ".join(info_parts)}</p>', unsafe_allow_html=True)
+        dv  = sum(h["quantity"]*(get_asset_price(h["symbol"])[0] or h["avg_cost"])
+                  for h in pf_h if _is_debt(h.get("asset_class","")))
+        ndv = pf_val - dv
+        parts = [f"Total AUM: ₹{indian_format(pf_val)}"]
+        if dv > 0:  parts.append(f"Debt: ₹{indian_format(dv)}")
+        if ndv > 0: parts.append(f"Market: ₹{indian_format(ndv)}")
+        parts.append(f"Meetings: {num_mtg}")
+        st.markdown(f'<p style="font-size:.82rem;color:#8892AA">{" · ".join(parts)}</p>', unsafe_allow_html=True)
 
         st.markdown("#### Dates")
         dc1,dc2 = st.columns(2)
         inv_date  = dc1.date_input("Invoice Date",       value=date.today())
-        pay_basis = dc2.date_input("Payment Date Basis", value=date.today(),
-                                    help="Due date = 15 days from this date")
-        pc1,pc2   = st.columns(2)
-        pf_from   = pc1.date_input("Period From", value=date.today().replace(day=1))
-        pf_to     = pc2.date_input("Period To",   value=date.today())
+        pay_basis = dc2.date_input("Payment Date Basis", value=date.today(), help="Due = 15 days from this")
+        pc1,pc2  = st.columns(2)
+        pf_from  = pc1.date_input("Period From", value=date.today().replace(day=1))
+        pf_to    = pc2.date_input("Period To",   value=date.today())
 
         st.markdown("#### Fee")
         fee_type  = st.selectbox("Fee Type", list(FEE_TYPES.keys()), format_func=lambda x: FEE_TYPES[x])
@@ -735,24 +523,22 @@ def render():
         freq = "annual"
         if fee_type == "management":
             freq = fc2.selectbox("Billing Frequency", list(FEE_FREQS.keys()), format_func=lambda x: FEE_FREQS[x])
-            if debt_val > 0:
-                st.caption("Debt assets always use daily accrual. Frequency applies to market holdings only.")
+            if dv > 0: st.caption("Debt assets always use daily accrual.")
         else:
             fc2.empty()
 
-        n_meetings = int(st.number_input("Meetings to Bill", min_value=0, value=num_mtg, step=1)) \
-                     if fee_type=="consultation" else num_mtg
+        n_mtg = int(st.number_input("Meetings to Bill", min_value=0, value=num_mtg, step=1)) \
+                if fee_type=="consultation" else num_mtg
 
         st.markdown("---")
         if st.button("🧮 Calculate Fee", use_container_width=True):
-            amount = calc_amount(fee_type, fee_value, freq, pf_val, n_meetings,
-                                 pf_from, pf_to, holdings=pf_holdings if fee_type=="management" else None)
+            amount = calc_amount(fee_type, fee_value, freq, pf_val, n_mtg,
+                                 pf_from, pf_to, holdings=pf_h if fee_type=="management" else None)
             n = _count_periods(pf_from, pf_to, freq) if fee_type=="management" else 0
             st.session_state["_inv_calc"] = {
                 "amount":amount,"fee_type":fee_type,"fee_value":fee_value,
-                "freq":freq,"pf_val":pf_val,"n_meetings":n_meetings,
-                "pf_from":str(pf_from),"pf_to":str(pf_to),"n":n,
-                "debt_val":debt_val,"non_debt_val":non_debt_val,
+                "freq":freq,"pf_val":pf_val,"n_meetings":n_mtg,
+                "pf_from":str(pf_from),"pf_to":str(pf_to),"n":n,"dv":dv,"ndv":ndv,
             }
             st.rerun()
 
@@ -760,22 +546,20 @@ def render():
         if calc:
             amount = calc["amount"]
             if calc["fee_type"]=="management":
-                days  = (pf_to - pf_from).days
+                days  = (pf_to-pf_from).days
                 n     = int(calc["n"])
-                parts = []
-                dv    = calc.get("debt_val",0)
-                ndv   = calc.get("non_debt_val",0)
-                if dv > 0:
-                    df = round(dv*(calc["fee_value"]/100/365)*days,2)
-                    parts.append(f"Debt ₹{indian_format(dv)} × {calc['fee_value']}%÷365 × {days}d = ₹{indian_format(df)}")
-                if ndv > 0:
+                parts_c = []
+                if calc["dv"]>0:
+                    df = round(calc["dv"]*(calc["fee_value"]/100/365)*days,2)
+                    parts_c.append(f"Debt ₹{indian_format(calc['dv'])} × {calc['fee_value']}%÷365 × {days}d = ₹{indian_format(df)}")
+                if calc["ndv"]>0:
                     div = {"annual":1,"quarterly":4,"monthly":12}.get(calc["freq"],12)
-                    nf  = round(ndv*(calc["fee_value"]/100/div)*n,2)
-                    parts.append(f"Market ₹{indian_format(ndv)} × {calc['fee_value']}%÷{div} × {n} period(s) = ₹{indian_format(nf)}")
-                if not parts:
+                    nf  = round(calc["ndv"]*(calc["fee_value"]/100/div)*n,2)
+                    parts_c.append(f"Market ₹{indian_format(calc['ndv'])} × {calc['fee_value']}%÷{div} × {n} period(s) = ₹{indian_format(nf)}")
+                if not parts_c:
                     div = {"annual":1,"quarterly":4,"monthly":12,"daily":365}.get(calc["freq"],12)
-                    parts.append(f"₹{indian_format(calc['pf_val'])} × {calc['fee_value']}%÷{div} × {n or days}")
-                detail = " + ".join(parts)
+                    parts_c.append(f"₹{indian_format(calc['pf_val'])} × {calc['fee_value']}%÷{div} × {n or days}")
+                detail = " + ".join(parts_c)
             elif calc["fee_type"]=="consultation":
                 detail = f"{calc['n_meetings']} meetings × ₹{indian_format(calc['fee_value'])}"
             else:
@@ -788,16 +572,16 @@ def render():
                 <div style="font-size:1.5rem;font-weight:700;color:#2ECC7A">= ₹{indian_format(amount)}</div>
             </div>""", unsafe_allow_html=True)
 
-            notes = st.text_input("Notes (optional)", key="inv_notes_field")
+            notes = st.text_input("Notes (optional)", key="inv_notes")
             if st.button("✅ Generate Invoice", use_container_width=True):
-                due_date = str(pay_basis + timedelta(days=15))
+                due = str(pay_basis + timedelta(days=15))
                 try:
                     inv_num = create_invoice(
-                        advisor_id=user["id"], ac_id=cl_id,
-                        fee_type=fee_type, fee_value=fee_value, fee_frequency=freq,
-                        amount=amount, portfolio_value=pf_val, num_meetings=n_meetings,
+                        advisor_id=user["id"], ac_id=cl_id, fee_type=fee_type,
+                        fee_value=fee_value, fee_frequency=freq, amount=amount,
+                        portfolio_value=pf_val, num_meetings=n_mtg,
                         period_from=str(pf_from), period_to=str(pf_to), notes=notes,
-                        invoice_date=str(inv_date), due_date=due_date,
+                        invoice_date=str(inv_date), due_date=due,
                     )
                     st.session_state.pop("_inv_calc",None)
                     st.success(f"Invoice {inv_num} created!"); st.rerun()
@@ -806,16 +590,15 @@ def render():
                         import time; time.sleep(0.5)
                         try:
                             inv_num = create_invoice(
-                                advisor_id=user["id"], ac_id=cl_id,
-                                fee_type=fee_type, fee_value=fee_value, fee_frequency=freq,
-                                amount=amount, portfolio_value=pf_val, num_meetings=n_meetings,
+                                advisor_id=user["id"], ac_id=cl_id, fee_type=fee_type,
+                                fee_value=fee_value, fee_frequency=freq, amount=amount,
+                                portfolio_value=pf_val, num_meetings=n_mtg,
                                 period_from=str(pf_from), period_to=str(pf_to), notes=notes,
-                                invoice_date=str(inv_date), due_date=due_date,
+                                invoice_date=str(inv_date), due_date=due,
                             )
                             st.session_state.pop("_inv_calc",None)
                             st.success(f"Invoice {inv_num} created!"); st.rerun()
-                        except Exception as e2: st.error(f"Could not generate invoice: {e2}")
-                    else:
-                        st.error(f"Could not generate invoice: {e}")
+                        except Exception as e2: st.error(f"Error: {e2}")
+                    else: st.error(f"Error: {e}")
         else:
-            st.info("Configure fee above then click **Calculate Fee** to preview before generating.")
+            st.info("Configure fee above then click **Calculate Fee** before generating.")
