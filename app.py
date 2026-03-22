@@ -34,6 +34,7 @@ import pages.analysis as analysis
 import pages.profile as profile
 import pages.clients as clients
 import pages.market_upload as market_upload
+import pages.data_management as data_management
 
 init_session()
 inject_styles()
@@ -86,6 +87,7 @@ PAGES = {
     "market_fd":          mkt_fd,
     "market_commodities": mkt_comm,
     "market_upload":      market_upload,
+    "data_management":    data_management,
     "meetings":           meetings,
     "invoices":           invoices,
     "fee_analyser":       fee_analyser,
