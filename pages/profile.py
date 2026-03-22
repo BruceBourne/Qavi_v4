@@ -46,6 +46,8 @@ def render():
                 navigate("market_upload")
             if st.button("🗄 Data Management",     use_container_width=True):
                 navigate("data_management")
+            if st.button("🔍 Stock Enrichment",      use_container_width=True):
+                navigate("stock_enrichment")
 
     with col2:
         st.markdown("#### Edit Profile")
