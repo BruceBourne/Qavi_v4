@@ -4,7 +4,7 @@ import streamlit as st
 from utils.session import navigate
 from utils.db import (get_advisor_clients, get_client_advisors, get_portfolios_for_ac,
                       get_private_portfolios, get_portfolio_holdings, get_all_prices_map,
-                      get_price_history, get_indices)
+                      get_price_history, get_indices, get_assets_map)
 from utils.crypto import inr, indian_format
 from collections import defaultdict
 from datetime import date, timedelta
@@ -164,6 +164,7 @@ def render():
     role    = user["role"]
     indices = get_indices()
     pmap    = get_all_prices_map()
+    amap    = get_assets_map()   # symbol → {name, sector, sub_class}
 
     st.markdown('<div class="page-title">Analysis</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-sub">Allocation · Performance · Risk · Scenarios</div>', unsafe_allow_html=True)
@@ -235,13 +236,24 @@ def render():
 
     # ── ALLOCATION ────────────────────────────────────────────────────────
     with t_alloc:
-        class_vals = defaultdict(float)
-        sub_vals   = defaultdict(float)
+        class_vals  = defaultdict(float)
+        sector_vals = defaultdict(float)
+        sub_vals    = defaultdict(float)
         for h in holdings:
             p, _ = _p(h["symbol"], pmap)
             v    = h["quantity"] * (p or h["avg_cost"])
-            class_vals[h["asset_class"]]        += v
-            sub_vals[h.get("sub_class","Other")] += v
+            ac   = h["asset_class"]
+            class_vals[ac] += v
+
+            # Use real sector from assets table; fall back to sub_class
+            asset_info = amap.get(h["symbol"], {})
+            sector     = (asset_info.get("sector") or "").strip()
+            if sector:
+                sector_vals[sector] += v
+            else:
+                sector_vals[h.get("sub_class","Unknown") or "Unknown"] += v
+
+            sub_vals[h.get("sub_class","Other") or "Other"] += v
 
         st.markdown("#### By Asset Class")
         st.markdown('<div class="stat-bar-wrap">', unsafe_allow_html=True)
@@ -249,7 +261,23 @@ def render():
             st.markdown(_bar(cls, val, cur, colors.get(cls,"#8892AA")), unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
-        st.markdown("<br>#### By Sub-Category")
+        # Sector breakdown — only show if any sectors are populated
+        has_sectors = any(k not in ("Unknown","Other","","Unclassified")
+                          for k in sector_vals)
+        if has_sectors:
+            st.markdown("<br>#### By Sector")
+            st.markdown('<div class="stat-bar-wrap">', unsafe_allow_html=True)
+            for sec, val in sorted(sector_vals.items(), key=lambda x:-x[1])[:15]:
+                st.markdown(_bar(sec, val, cur, "#A855F7"), unsafe_allow_html=True)
+            st.markdown("</div>", unsafe_allow_html=True)
+        else:
+            st.markdown("""<br><div style="background:#0F1117;border:1px solid #252D40;
+                border-radius:8px;padding:.7rem 1rem;font-size:.77rem;color:#8892AA">
+                Sector breakdown not available yet. Go to <b>Profile → Stock Enrichment</b>
+                to populate sectors for your holdings.
+            </div>""", unsafe_allow_html=True)
+
+        st.markdown("<br>#### By Cap / Sub-Category")
         st.markdown('<div class="stat-bar-wrap">', unsafe_allow_html=True)
         for sub, val in sorted(sub_vals.items(), key=lambda x:-x[1])[:15]:
             st.markdown(_bar(sub, val, cur, "#4F7EFF"), unsafe_allow_html=True)
