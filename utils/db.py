@@ -327,7 +327,64 @@ def get_invoices_for_advisor(advisor_id):
 def update_invoice_status(inv_id, status):
     sb().table("invoices").update({"status": status}).eq("id", inv_id).execute()
 
-# ── MARKET DATA — short TTL so upload reflects quickly ────────────────────
+# ── RPC CALLS — single-round-trip calculations ────────────────────────────
+# These call PostgreSQL functions defined in rpc_functions.sql
+# Each replaces 5-20 individual Supabase queries with one server-side call.
+
+def rpc_holdings_with_prices(pf_id: str) -> list:
+    """Holdings + current prices + P&L — all calculated in DB. One call."""
+    try:
+        r = sb().rpc("get_holdings_with_prices", {"p_portfolio_id": pf_id}).execute()
+        return r.data or []
+    except Exception:
+        # Fallback to old method if RPC not yet deployed
+        return []
+
+def rpc_portfolio_summary(ac_id: str) -> list:
+    """All portfolios for a client with totals. One call."""
+    try:
+        r = sb().rpc("get_portfolio_summary", {"p_ac_id": ac_id}).execute()
+        return r.data or []
+    except Exception:
+        return []
+
+def rpc_advisor_dashboard(advisor_id: str) -> list:
+    """All clients + AUM for advisor dashboard. One call."""
+    try:
+        r = sb().rpc("get_advisor_dashboard", {"p_advisor_id": advisor_id}).execute()
+        return r.data or []
+    except Exception:
+        return []
+
+def rpc_client_dashboard(user_id: str) -> list:
+    """All accessible portfolios + totals for client. One call."""
+    try:
+        r = sb().rpc("get_client_dashboard", {"p_user_id": user_id}).execute()
+        return r.data or []
+    except Exception:
+        return []
+
+def rpc_calc_invoice(ac_id: str, date_from, date_to,
+                     fee_value: float, frequency: str,
+                     fee_type: str, num_meetings: int = 0) -> list:
+    """
+    Fee calculation + holdings snapshot for invoice — all in DB.
+    Returns rows with fee_amount, debt/non_debt split, and per-holding data.
+    One call replaces: portfolio fetch + holdings fetch + N×price lookups + Python fee math.
+    """
+    try:
+        r = sb().rpc("calc_invoice_data", {
+            "p_ac_id":        ac_id,
+            "p_date_from":    str(date_from),
+            "p_date_to":      str(date_to),
+            "p_fee_value":    float(fee_value),
+            "p_frequency":    frequency,
+            "p_fee_type":     fee_type,
+            "p_num_meetings": int(num_meetings),
+        }).execute()
+        return r.data or []
+    except Exception:
+        return []
 # TTL = 300s (5 min). After upload, call clear_market_cache() for instant refresh.
 
 @st.cache_data(ttl=300)
