@@ -437,6 +437,9 @@ def get_assets_map():
             break
         page += 1
     return result
+
+@st.cache_data(ttl=300)
+def get_assets(asset_class=None, sub_class=None, search=None):
     """Fetches all assets — paginates in 1000-row batches to bypass Supabase default limit."""
     q_base = sb().table("assets").select("*").eq("is_active", True)
     if asset_class: q_base = q_base.eq("asset_class", asset_class)
