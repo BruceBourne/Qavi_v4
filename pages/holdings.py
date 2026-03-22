@@ -9,36 +9,37 @@ from utils.db import (get_client_advisors, get_advisor_clients, get_portfolios_f
                       get_asset_price, submit_pending_asset, get_pending_assets_for_user,
                       rpc_holdings_with_prices, sb)
 from utils.crypto import inr, fmt_date, indian_format
+from datetime import date
 
 ASSET_CLASSES = {
-    "Equity":      {"sub":["Large Cap","Mid Cap","Small Cap"],                                     "unit":"shares"},
-    "Mutual Fund": {"sub":["Large Cap","Mid Cap","Small Cap","Flexi Cap","ELSS","Hybrid","Debt","Index"],"unit":"units"},
-    "ETF":         {"sub":["Index ETF","Gold ETF","Sectoral ETF","Commodity ETF","Liquid ETF"],    "unit":"units"},
-    "Bond":        {"sub":["Government Bond","PSU Bond","Corporate NCD","Sovereign Gold Bond","Small Savings"],"unit":"units"},
-    "Bank FD":     {"sub":["Bank FD","Corporate FD"],                                              "unit":"amount"},
-    "Commodity":   {"sub":["Precious Metal","Commodity"],                                          "unit":"grams"},
+    "Equity":        {"sub":["Large Cap","Mid Cap","Small Cap"],                                      "unit":"shares"},
+    "Mutual Fund":   {"sub":["Large Cap","Mid Cap","Small Cap","Flexi Cap","ELSS","Hybrid","Debt","Index"],"unit":"units"},
+    "ETF":           {"sub":["Index ETF","Gold ETF","Sectoral ETF","Commodity ETF","Liquid ETF"],     "unit":"units"},
+    "Bond":          {"sub":["Government Bond","PSU Bond","Corporate NCD","Sovereign Gold Bond","Small Savings"],"unit":"units"},
+    "Bank FD":       {"sub":["Bank FD","Corporate FD"],                                               "unit":"amount"},
+    "Commodity":     {"sub":["Precious Metal","Commodity"],                                           "unit":"grams"},
+    "Crypto":        {"sub":["Large Cap Crypto","Mid Cap Crypto","Stablecoin","DeFi Token"],          "unit":"units"},
+    "Real Estate":   {"sub":["Residential","Commercial","REITs","Land"],                              "unit":"amount"},
+    "Physical Gold": {"sub":["Coins","Bars","Jewellery"],                                             "unit":"grams"},
+    "Alternatives":  {"sub":["Private Equity","Venture Capital","Hedge Fund","Angel Investment"],     "unit":"amount"},
 }
 
-def _all_assets_for_class(ac):
-    """Return list of (symbol, name, interest_rate, tenure) for an asset class."""
-    if ac == "Equity":
-        return [(d["symbol"], d["name"], None, None) for d in get_assets("Equity")]
-    if ac == "ETF":
-        return [(d["symbol"], d["name"], None, None) for d in get_assets("ETF")]
-    if ac == "Mutual Fund":
-        return [(m["symbol"], m["name"], None, None) for m in get_mutual_funds()]
-    if ac in ("Bond","Bank FD"):
-        return [(f["symbol"], f["name"], f.get("interest_rate"), f.get("tenure_years"))
-                for f in get_fixed_income(ac)]
-    if ac == "Commodity":
-        return [(c["symbol"], c["name"], None, None) for c in get_commodities()]
-    return []
+DEBT_CLASSES    = {"Bond","Bank FD"}
+INTEREST_CLASSES = {"Bond","Bank FD"}
 
-def _search_assets(pairs, query):
-    """Filter (sym, name, rate, ten) list by query matching symbol or name."""
-    q = query.strip().lower()
-    if not q: return pairs[:30]          # show first 30 when empty
-    return [p for p in pairs if q in p[0].lower() or q in p[1].lower()][:40]
+def _all_assets(ac):
+    if ac == "Equity":   return [(d["symbol"],d["name"],None,None) for d in get_assets("Equity")]
+    if ac == "ETF":      return [(d["symbol"],d["name"],None,None) for d in get_assets("ETF")]
+    if ac == "Mutual Fund": return [(m["symbol"],m["name"],None,None) for m in get_mutual_funds()]
+    if ac in INTEREST_CLASSES:
+        return [(f["symbol"],f["name"],f.get("interest_rate"),f.get("tenure_years")) for f in get_fixed_income(ac)]
+    if ac == "Commodity": return [(c["symbol"],c["name"],None,None) for c in get_commodities()]
+    return []   # Crypto, Real Estate, Physical Gold, Alternatives — manual entry only
+
+def _search(pairs, q):
+    if not q.strip(): return pairs[:30]
+    ql = q.lower()
+    return [p for p in pairs if ql in p[0].lower() or ql in p[1].lower()][:40]
 
 def _collect_portfolios(user):
     pfs = []
@@ -57,6 +58,22 @@ def _collect_portfolios(user):
             pf["_label"] = f"{pf['name']} (private)"
             pfs.append(pf)
     return pfs
+
+def _qty_input(utype, label_override=None, key_sfx=""):
+    label = label_override or {
+        "shares": "Quantity (shares)",
+        "amount": "Amount Invested (₹)",
+        "grams":  "Quantity (grams)",
+        "units":  "Units",
+    }.get(utype, "Quantity")
+    if utype == "shares":
+        return float(st.number_input(label, min_value=1, step=1, value=1, format="%d", key=f"qty_{key_sfx}"))
+    elif utype == "amount":
+        return st.number_input(label, min_value=0.01, step=500.0, key=f"qty_{key_sfx}")
+    elif utype == "grams":
+        return st.number_input(label, min_value=0.001, step=0.1, format="%.3f", key=f"qty_{key_sfx}")
+    else:
+        return st.number_input(label, min_value=0.001, step=0.001, format="%.3f", key=f"qty_{key_sfx}")
 
 def render():
     if not st.session_state.get("user"):
@@ -87,7 +104,6 @@ def render():
     st.markdown(f'<div class="page-title">📁 {pf["name"]}</div>', unsafe_allow_html=True)
     vis = "🟢 Shared" if pf["visibility"]=="shared" else "🔒 Private"
     st.markdown(f'<div class="page-sub">{vis}</div>', unsafe_allow_html=True)
-
     m1,m2,m3,m4 = st.columns(4)
     m1.metric("Invested",      inr(inv))
     m2.metric("Current Value", inr(cur))
@@ -100,22 +116,15 @@ def render():
 
     # ── HOLDINGS ──────────────────────────────────────────────────────────
     with tabs[0]:
-        # Single DB call returns holdings + prices + P&L pre-calculated
         rpc_h = rpc_holdings_with_prices(pf_id)
         if not rpc_h:
-            # Fallback if RPC not yet deployed
             rpc_h = []
             for h in holdings:
                 p, chg = get_asset_price(h["symbol"])
                 bv = h["quantity"]*h["avg_cost"]
                 cv = h["quantity"]*(p or h["avg_cost"])
-                rpc_h.append({**h,
-                    "close_price": p, "change_pct": chg,
-                    "buy_value": bv, "current_value": cv,
-                    "pnl": cv-bv,
-                    "pnl_pct": ((p-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0
-                })
-
+                rpc_h.append({**h,"close_price":p,"change_pct":chg,"buy_value":bv,"current_value":cv,
+                               "pnl":cv-bv,"pnl_pct":((p-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0})
         if not rpc_h:
             st.info("No holdings yet.")
         else:
@@ -123,16 +132,12 @@ def render():
             for col,lbl in zip(hdr,["Symbol","Asset","Qty","Buy Cost","Closing Price","P&L"]+([""]*1 if can_edit else [])):
                 col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
-
             for h in rpc_h:
-                p    = h.get("close_price", 0)
-                chg  = h.get("change_pct",  0)
-                hpnl = h.get("pnl", 0)
-                hpct = h.get("pnl_pct", 0)
-                pc   = "#2ECC7A" if hpnl>=0 else "#FF5A5A"
-                cc   = "#2ECC7A" if chg>=0  else "#FF5A5A"
+                p    = h.get("close_price",0); chg = h.get("change_pct",0)
+                hpnl = h.get("pnl",0);         hpct = h.get("pnl_pct",0)
+                pc = "#2ECC7A" if hpnl>=0 else "#FF5A5A"; cc = "#2ECC7A" if chg>=0 else "#FF5A5A"
                 flag = "⚠️ " if h.get("is_manual") and not h.get("is_verified") else ""
-                hc   = st.columns([2.5,1.2,1.2,1.5,1.5,2,0.5] if can_edit else [2.5,1.2,1.2,1.5,1.5,2])
+                hc = st.columns([2.5,1.2,1.2,1.5,1.5,2,0.5] if can_edit else [2.5,1.2,1.2,1.5,1.5,2])
                 hc[0].markdown(f"<div style='font-weight:600;font-size:.88rem'>{flag}{h['symbol']}</div><div style='font-size:.72rem;color:#8892AA'>{h.get('sub_class','')}</div>", unsafe_allow_html=True)
                 hc[1].markdown(f"<span class='badge badge-{h['asset_class'][:2].lower()}'>{h['asset_class'][:3]}</span>", unsafe_allow_html=True)
                 hc[2].markdown(f"<div style='font-size:.84rem'>{h['quantity']:g} {h.get('unit_type','')}</div>", unsafe_allow_html=True)
@@ -148,11 +153,11 @@ def render():
         txns = get_transactions(pf_id)
         if not txns: st.info("No transactions yet.")
         for t in txns[:50]:
-            tc = "#2ECC7A" if t["txn_type"]=="BUY" else "#FF5A5A"
+            tc = "#2ECC7A" if t["txn_type"] in ("BUY","SIP") else "#FF5A5A"
             rc = st.columns([1,2,1.5,1.5,2,2])
             rc[0].markdown(f"<span style='color:{tc};font-weight:700;font-size:.82rem'>{t['txn_type']}</span>", unsafe_allow_html=True)
             rc[1].markdown(f"<span style='font-weight:600;font-size:.84rem'>{t['symbol']}</span>", unsafe_allow_html=True)
-            rc[2].markdown(f"<span style='font-size:.82rem'>{t['quantity']:g} units</span>", unsafe_allow_html=True)
+            rc[2].markdown(f"<span style='font-size:.82rem'>{t['quantity']:g}</span>", unsafe_allow_html=True)
             rc[3].markdown(f"<span style='font-size:.82rem'>@ ₹{indian_format(t['price'])}</span>", unsafe_allow_html=True)
             rc[4].markdown(f"<span style='font-weight:600'>₹{indian_format(t['amount'])}</span>", unsafe_allow_html=True)
             rc[5].markdown(f"<span style='font-size:.78rem;color:#8892AA'>{fmt_date(t.get('txn_date',''))}</span>", unsafe_allow_html=True)
@@ -161,186 +166,186 @@ def render():
     if not can_edit: return
 
     # ── ADD ASSET ─────────────────────────────────────────────────────────
-    # Asset class and search are OUTSIDE the form — refresh immediately on change
     with tabs[2]:
         st.markdown("#### Add Asset")
-
         c1, c2 = st.columns(2)
-        ac   = c1.selectbox("Asset Class", list(ASSET_CLASSES.keys()), key="add_ac")
-        utype = ASSET_CLASSES[ac]["unit"]
+        ac     = c1.selectbox("Asset Class", list(ASSET_CLASSES.keys()), key="add_ac")
+        utype  = ASSET_CLASSES[ac]["unit"]
 
-        # All assets for chosen class
-        all_pairs = _all_assets_for_class(ac)
-
-        # Searchable text input — matches ticker AND company name
-        search_q = c2.text_input(
-            "Search by ticker or name",
-            placeholder="e.g. RELIANCE or Tata Motors",
-            key="asset_search"
-        )
-        filtered = _search_assets(all_pairs, search_q)
-
-        if not filtered:
-            st.warning("No matches. Try a different search term, or use Manual Entry.")
-        else:
-            sym_opts  = [s for s,_,_,_ in filtered]
-            sym_names = {s:n for s,n,_,_ in filtered}
-            sym_rates = {s:r for s,_,r,_ in filtered}
-            sym_ten   = {s:t for s,_,_,t in filtered}
-
-            symbol = st.selectbox(
-                "Select Asset",
-                sym_opts,
-                format_func=lambda x: f"{x}  ·  {sym_names.get(x,x)}",
-                key="add_symbol"
-            )
-
-            # Show price / interest rate info OUTSIDE form so it's always visible
-            if ac in ("Bond","Bank FD"):
-                rate   = sym_rates.get(symbol)
-                tenure = sym_ten.get(symbol)
-                if rate:
-                    st.markdown(f"""
-                    <div style="background:#1E2535;border:1px solid #2ECC7A;border-radius:8px;
-                        padding:.65rem 1rem;margin:.35rem 0;font-size:.82rem">
-                        <span style="color:#8892AA">Interest Rate: </span>
-                        <span style="color:#2ECC7A;font-weight:700">{rate:.2f}% p.a.</span>
-                        {'&nbsp;·&nbsp;<span style="color:#8892AA">Tenure: </span><span style="color:#F0F4FF">' + str(tenure) + ' yr</span>' if tenure else ''}
-                    </div>""", unsafe_allow_html=True)
-            else:
-                cur_p, chg = get_asset_price(symbol)
-                if cur_p:
-                    cc = "#2ECC7A" if chg>=0 else "#FF5A5A"
-                    st.markdown(f"""
-                    <div style="background:#1E2535;border:1px solid #252D40;border-radius:8px;
-                        padding:.65rem 1rem;margin:.35rem 0;font-size:.82rem">
-                        <span style="color:#8892AA">Closing Price: </span>
-                        <span style="font-weight:700">₹{indian_format(cur_p)}</span>
-                        &nbsp;<span style="color:{cc};font-size:.77rem">{chg:+.2f}%</span>
-                    </div>""", unsafe_allow_html=True)
-
-            with st.form("add_holding_form"):
-                if ac in ("Bond","Bank FD"):
-                    rate_val = sym_rates.get(symbol) or 0.0
-                    interest_rate = st.number_input(
-                        "Interest Rate (% p.a.)",
-                        value=float(rate_val), min_value=0.0, step=0.05, format="%.2f"
-                    )
-                else:
-                    interest_rate = None
-
-                # SIP option for Mutual Funds
-                sip_mode = False
-                sip_frequency = None
-                sip_amount_val = 0.0
-                sip_start = None
-                if ac == "Mutual Fund":
-                    inv_type = st.radio("Investment Type",
-                                        ["Lump Sum", "SIP (Systematic Investment Plan)"],
-                                        horizontal=True, key="mf_inv_type")
-                    sip_mode = (inv_type == "SIP (Systematic Investment Plan)")
-                    if sip_mode:
-                        sip_frequency = st.selectbox(
-                            "SIP Frequency",
-                            ["Daily","Weekly","Monthly","Quarterly","Annual"],
-                            index=2  # default monthly
-                        )
-                        c1, c2 = st.columns(2)
-                        sip_amount_val = c1.number_input("SIP Amount (₹)", min_value=100.0, step=500.0, value=1000.0)
-                        sip_start = c2.date_input("SIP Start Date")
-                        st.caption("Enter the total units accumulated so far as Qty, and average NAV as Buy Price.")
-
-                if utype == "shares":
-                    qty = float(st.number_input("Quantity (shares)", min_value=1, step=1, value=1, format="%d"))
-                elif utype == "amount":
-                    qty = st.number_input("Amount Invested (₹)", min_value=100.0, step=500.0)
-                elif utype == "grams":
-                    qty = st.number_input("Quantity (grams)", min_value=0.01, step=0.1, format="%.2f")
-                else:
-                    qty = st.number_input("Units" if not sip_mode else "Total Units Accumulated",
-                                          min_value=0.001, step=0.001, format="%.3f")
-
-                avg_cost = st.number_input(
-                    "Investment Amount (₹)" if utype=="amount" else "Buy Price / NAV (₹)",
-                    min_value=0.01, step=1.0, format="%.2f"
-                )
+        # Classes with no DB entries — go straight to manual form
+        if ac in ("Crypto","Real Estate","Physical Gold","Alternatives"):
+            st.info(f"No live market feed for {ac}. Use the fields below to add manually.")
+            with st.form(f"add_alt_{ac}"):
+                sym  = st.text_input("Symbol / Name *", placeholder="e.g. BTC, Property Address")
+                sub  = c2.selectbox("Sub-Category", ASSET_CLASSES[ac]["sub"], key="add_sub_alt")
+                qty  = _qty_input(utype, key_sfx="alt")
+                cost = st.number_input("Purchase Price (₹)", min_value=0.01, step=100.0, format="%.2f")
                 notes = st.text_input("Notes (optional)")
-
                 if st.form_submit_button("Add to Portfolio", use_container_width=True):
-                    if qty <= 0 or avg_cost <= 0:
-                        st.error("Quantity and price must be positive.")
+                    if not sym.strip(): st.error("Symbol/Name required.")
+                    elif qty <= 0 or cost <= 0: st.error("Quantity and price must be positive.")
                     else:
-                        note_str = notes
-                        if interest_rate is not None and interest_rate > 0:
-                            note_str = f"rate:{interest_rate:.2f}%" + (f" | {notes}" if notes else "")
-                        if sip_mode and sip_frequency:
-                            note_str = (f"sip:{sip_frequency.lower()}:₹{sip_amount_val:g}"
-                                        + (f" | {notes}" if notes else ""))
-
-                        # Get sub from asset data
-                        sub = next((d.get("sub_class","") for d in get_assets(ac)
-                                    if d["symbol"]==symbol), ASSET_CLASSES[ac]["sub"][0])
-                        if not sub:
-                            sub = ASSET_CLASSES[ac]["sub"][0]
-
-                        # Store holding with SIP metadata
-                        from datetime import date as _date
                         sb().table("holdings").insert({
-                            "portfolio_id":   pf_id,
-                            "symbol":         symbol,
-                            "asset_class":    ac,
-                            "sub_class":      sub,
-                            "quantity":       float(qty),
-                            "unit_type":      utype,
-                            "avg_cost":       avg_cost,
-                            "notes":          note_str,
-                            "is_manual":      False,
-                            "investment_type": "sip" if sip_mode else "lump_sum",
-                            "sip_frequency":  sip_frequency.lower() if sip_mode and sip_frequency else None,
-                            "sip_amount":     sip_amount_val if sip_mode else 0,
-                            "sip_start_date": str(sip_start) if sip_mode and sip_start else None,
+                            "portfolio_id":pf_id,"symbol":sym.upper(),"asset_class":ac,
+                            "sub_class":sub,"quantity":float(qty),"unit_type":utype,
+                            "avg_cost":cost,"notes":notes,"is_manual":True,
+                            "investment_type":"lump_sum",
                         }).execute()
-                        sb().table("transactions").insert({
-                            "portfolio_id": pf_id,
-                            "symbol":       symbol,
-                            "txn_type":     "SIP" if sip_mode else "BUY",
-                            "quantity":     float(qty),
-                            "price":        avg_cost,
-                            "amount":       float(qty) * avg_cost,
-                            "txn_date":     str(sip_start) if sip_mode and sip_start else str(_date.today()),
-                        }).execute()
-                        st.success(f"Added {'SIP — ' if sip_mode else ''}{qty:g} units of {symbol}")
-                        st.rerun()
+                        st.success(f"Added {sym.upper()} to portfolio."); st.rerun()
+        else:
+            all_pairs = _all_assets(ac)
+            search_q  = c2.text_input("Search by ticker or name", placeholder="e.g. RELIANCE", key="asset_search")
+            filtered  = _search(all_pairs, search_q)
+            sub_opts  = ASSET_CLASSES[ac]["sub"]
+
+            if not filtered:
+                st.warning("No matches. Try Manual Entry tab.")
+            else:
+                sym_opts  = [s for s,_,_,_ in filtered]
+                sym_names = {s:n for s,n,_,_ in filtered}
+                sym_rates = {s:r for s,_,r,_ in filtered}
+                sym_ten   = {s:t for s,_,_,t in filtered}
+
+                symbol = st.selectbox("Asset", sym_opts,
+                                      format_func=lambda x: f"{x}  ·  {sym_names.get(x,x)}",
+                                      key="add_symbol")
+
+                # Show price / rate info outside form
+                if ac in INTEREST_CLASSES:
+                    rate   = sym_rates.get(symbol) or 0
+                    tenure = sym_ten.get(symbol)
+                    if rate:
+                        st.markdown(f"""<div style="background:#1E2535;border:1px solid #2ECC7A;
+                            border-radius:8px;padding:.65rem 1rem;margin:.35rem 0;font-size:.82rem">
+                            <span style="color:#8892AA">Interest Rate: </span>
+                            <span style="color:#2ECC7A;font-weight:700">{rate:.2f}% p.a.</span>
+                            {'&nbsp;·&nbsp;<span style="color:#8892AA">Tenure: </span><span>' + str(tenure) + ' yr</span>' if tenure else ''}
+                        </div>""", unsafe_allow_html=True)
+                else:
+                    cur_p, chg = get_asset_price(symbol)
+                    if cur_p:
+                        cc = "#2ECC7A" if chg>=0 else "#FF5A5A"
+                        st.markdown(f"""<div style="background:#1E2535;border:1px solid #252D40;
+                            border-radius:8px;padding:.65rem 1rem;margin:.35rem 0;font-size:.82rem">
+                            <span style="color:#8892AA">Closing Price: </span>
+                            <span style="font-weight:700">₹{indian_format(cur_p)}</span>
+                            &nbsp;<span style="color:{cc};font-size:.77rem">{chg:+.2f}%</span>
+                        </div>""", unsafe_allow_html=True)
+
+                with st.form("add_holding_form"):
+                    # Interest rate for FD/Bond — single field, pre-filled
+                    if ac in INTEREST_CLASSES:
+                        rate_val      = sym_rates.get(symbol) or 0.0
+                        interest_rate = st.number_input("Interest Rate (% p.a.)",
+                                                        value=float(rate_val), min_value=0.0,
+                                                        step=0.05, format="%.2f")
+                    else:
+                        interest_rate = None
+
+                    # SIP option for Mutual Funds
+                    sip_mode = False; sip_frequency = None; sip_amount_val = 0.0; sip_start = None
+                    if ac == "Mutual Fund":
+                        inv_type = st.radio("Investment Type",
+                                            ["Lump Sum","SIP (Systematic Investment Plan)"],
+                                            horizontal=True, key="mf_inv_type")
+                        sip_mode = (inv_type == "SIP (Systematic Investment Plan)")
+                        if sip_mode:
+                            s1, s2 = st.columns(2)
+                            sip_frequency  = s1.selectbox("SIP Frequency",
+                                                          ["Daily","Weekly","Monthly","Quarterly","Annual"], index=2)
+                            sip_amount_val = s2.number_input("SIP Amount (₹)", min_value=100.0, step=500.0, value=1000.0)
+                            sip_start      = st.date_input("SIP Start Date")
+                            st.caption("Enter total units accumulated as Qty, and weighted average NAV as Buy Price.")
+
+                    # Single quantity field — label adapts to asset class
+                    qty_label = "Amount Invested (₹)" if utype == "amount" else (
+                                "Units" if not sip_mode else "Total Units Accumulated")
+                    qty  = _qty_input(utype, label_override=qty_label, key_sfx="db")
+
+                    # Single price field — label adapts
+                    cost = st.number_input(
+                        "Buy Price / NAV (₹)" if utype != "amount" else "Amount Invested (₹)",
+                        min_value=0.01, step=1.0, format="%.2f"
+                    )
+                    notes = st.text_input("Notes (optional)")
+
+                    if st.form_submit_button("Add to Portfolio", use_container_width=True):
+                        if qty <= 0 or cost <= 0:
+                            st.error("Quantity and price must be positive.")
+                        else:
+                            note_str = notes
+                            if interest_rate is not None and interest_rate > 0:
+                                note_str = f"rate:{interest_rate:.2f}%" + (f" | {notes}" if notes else "")
+                            if sip_mode and sip_frequency:
+                                note_str = f"sip:{sip_frequency.lower()}:₹{sip_amount_val:g}" + (f" | {notes}" if notes else "")
+
+                            sub = next((d.get("sub_class","") for d in get_assets(ac)
+                                        if d["symbol"]==symbol), sub_opts[0])
+                            if not sub: sub = sub_opts[0]
+
+                            sb().table("holdings").insert({
+                                "portfolio_id":   pf_id, "symbol": symbol,
+                                "asset_class":    ac, "sub_class": sub,
+                                "quantity":       float(qty), "unit_type": utype,
+                                "avg_cost":       cost, "notes": note_str,
+                                "is_manual":      False,
+                                "investment_type": "sip" if sip_mode else "lump_sum",
+                                "sip_frequency":  sip_frequency.lower() if sip_mode and sip_frequency else None,
+                                "sip_amount":     sip_amount_val if sip_mode else 0,
+                                "sip_start_date": str(sip_start) if sip_mode and sip_start else None,
+                            }).execute()
+                            sb().table("transactions").insert({
+                                "portfolio_id": pf_id, "symbol": symbol,
+                                "txn_type":     "SIP" if sip_mode else "BUY",
+                                "quantity":     float(qty), "price": cost,
+                                "amount":       float(qty) * cost,
+                                "txn_date":     str(sip_start) if sip_mode and sip_start else str(date.today()),
+                            }).execute()
+                            st.success(f"Added {'SIP — ' if sip_mode else ''}{qty:g} of {symbol}")
+                            st.rerun()
 
     # ── MANUAL ENTRY ──────────────────────────────────────────────────────
     with tabs[3]:
         st.markdown("#### Add Asset Not in Database")
+        st.caption("For assets with no live feed — verified within 24 hours, shown with ⚠️ until then.")
+        mac = st.selectbox("Asset Class", list(ASSET_CLASSES.keys()), key="mac")
+        msc = st.selectbox("Sub-Category", ASSET_CLASSES[mac]["sub"], key="msc")
+        mutype = ASSET_CLASSES[mac]["unit"]
         with st.form("manual_holding"):
             ms  = st.text_input("Symbol / Ticker *")
             mn  = st.text_input("Asset Name *")
-            mac = st.selectbox("Asset Class", list(ASSET_CLASSES.keys()), key="mac")
-            msc = st.selectbox("Sub-Category", ASSET_CLASSES[mac]["sub"], key="msc")
             mi  = st.text_input("ISIN (optional)")
-            mut = ASSET_CLASSES[mac]["unit"]
-            if mut == "shares":
-                mq = float(st.number_input("Shares", min_value=1, step=1, value=1, format="%d", key="mq"))
-            elif mut == "amount":
-                mq = st.number_input("Amount (₹)", min_value=100.0, step=500.0, key="mq")
-            elif mut == "grams":
-                mq = st.number_input("Grams", min_value=0.01, step=0.1, format="%.2f", key="mq")
+
+            # Asset-class-specific fields
+            if mac in INTEREST_CLASSES:
+                c1m, c2m = st.columns(2)
+                m_rate    = c1m.number_input("Interest Rate (% p.a.)", min_value=0.0, step=0.05, format="%.2f")
+                m_tenure  = c2m.number_input("Tenure (years)", min_value=0.0, step=0.5, format="%.1f")
+                m_maturity = st.text_input("Maturity Date (DD-MM-YYYY, optional)")
             else:
-                mq = st.number_input("Units", min_value=0.001, step=0.001, format="%.3f", key="mq")
-            mc_price = st.number_input("Buy Price (₹)", min_value=0.01, step=1.0, format="%.2f")
-            mnotes   = st.text_input("Notes (optional)", key="mnotes")
+                m_rate = m_tenure = m_maturity = None
+
+            mq   = _qty_input(mutype, key_sfx="man")
+            mc   = st.number_input("Buy Price / Value (₹)", min_value=0.01, step=1.0, format="%.2f")
+            mnotes = st.text_input("Notes (optional)", key="mnotes")
+
             if st.form_submit_button("Submit for Verification", use_container_width=True):
                 if not ms.strip() or not mn.strip():
                     st.error("Symbol and name required.")
-                elif mq <= 0 or mc_price <= 0:
+                elif mq <= 0 or mc <= 0:
                     st.error("Quantity and price must be positive.")
                 else:
+                    note_str = mnotes
+                    if m_rate: note_str = f"rate:{m_rate:.2f}%,tenure:{m_tenure}yr" + (f" | {mnotes}" if mnotes else "")
                     submit_pending_asset(user["id"], ms.strip().upper(), mn.strip(), mac, msc, mi)
-                    add_holding(pf_id, ms.strip().upper(), mac, msc, float(mq), mut, mc_price, mnotes, is_manual=True)
-                    st.success(f"{ms.upper()} added with ⚠️ — pending verification."); st.rerun()
+                    sb().table("holdings").insert({
+                        "portfolio_id": pf_id, "symbol": ms.strip().upper(),
+                        "asset_class": mac, "sub_class": msc,
+                        "quantity": float(mq), "unit_type": mutype,
+                        "avg_cost": mc, "notes": note_str, "is_manual": True,
+                        "investment_type": "lump_sum",
+                    }).execute()
+                    st.success(f"{ms.upper()} added with ⚠️ pending verification."); st.rerun()
 
     # ── PENDING ───────────────────────────────────────────────────────────
     with tabs[4]:
