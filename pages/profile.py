@@ -42,8 +42,10 @@ def render():
 
         if role == "advisor":
             st.markdown("<br>", unsafe_allow_html=True)
-            if st.button("📊 Update Market Data", use_container_width=True):
+            if st.button("📊 Update Market Data",  use_container_width=True):
                 navigate("market_upload")
+            if st.button("🗄 Data Management",     use_container_width=True):
+                navigate("data_management")
 
     with col2:
         st.markdown("#### Edit Profile")

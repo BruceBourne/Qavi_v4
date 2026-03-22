@@ -3,15 +3,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 from utils.session import navigate
 from utils.db import (get_advisor_clients, get_client_advisors, get_portfolios_for_ac,
-                      get_private_portfolios, get_portfolio_holdings, get_asset_price, get_indices)
+                      get_private_portfolios, get_portfolio_holdings, get_all_prices_map, get_indices)
 from utils.crypto import inr, indian_format
 from collections import defaultdict
 import math
 
-def _stats(holdings):
+def _p(sym, pmap):
+    r = pmap.get(sym)
+    return (r["close"], r.get("change_pct",0)) if r else (0.0, 0.0)
+
+def _stats(holdings, pmap):
     inv = cur = 0.0
     for h in holdings:
-        p, _ = get_asset_price(h["symbol"])
+        p, _ = _p(h["symbol"], pmap)
         inv += h["quantity"] * h["avg_cost"]
         cur += h["quantity"] * (p or h["avg_cost"])
     return inv, cur
@@ -33,6 +37,7 @@ def render():
     user = st.session_state.user
     role = user["role"]
     indices = get_indices()
+    pmap    = get_all_prices_map()   # fetch once, use everywhere
 
     st.markdown('<div class="page-title">Analysis</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-sub">Portfolio analytics — allocation, P&L, benchmarks</div>', unsafe_allow_html=True)
@@ -73,7 +78,7 @@ def render():
 
     if not holdings: st.info("No holdings in this selection."); return
 
-    inv, cur = _stats(holdings)
+    inv, cur = _stats(holdings, pmap)
     pnl = cur - inv; pnl_pct = (pnl/inv*100) if inv else 0
 
     m1,m2,m3,m4 = st.columns(4)
@@ -94,7 +99,7 @@ def render():
         class_vals  = defaultdict(float)
         sector_vals = defaultdict(float)
         for h in holdings:
-            p,_ = get_asset_price(h["symbol"])
+            p,_ = _p(h["symbol"], pmap)
             v   = h["quantity"]*(p or h["avg_cost"])
             class_vals[h["asset_class"]]       += v
             sector_vals[h.get("sub_class","?")] += v
@@ -116,8 +121,8 @@ def render():
         for col,lbl in zip(hdr,["Symbol","Asset","Qty","Avg Cost","LTP","P&L","Weight"]):
             col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
         st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
-        for h in sorted(holdings, key=lambda x:-(get_asset_price(x["symbol"])[0]*x["quantity"])):
-            p, chg = get_asset_price(h["symbol"])
+        for h in sorted(holdings, key=lambda x:-(_p(x["symbol"], pmap)[0]*x["quantity"])):
+            p, chg = _p(h["symbol"], pmap)
             val    = h["quantity"]*(p or h["avg_cost"])
             hpnl   = (p-h["avg_cost"])*h["quantity"]
             hpct   = ((p-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0

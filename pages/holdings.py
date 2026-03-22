@@ -7,7 +7,7 @@ from utils.db import (get_client_advisors, get_advisor_clients, get_portfolios_f
                       get_portfolio_by_id, add_holding, remove_holding,
                       get_assets, get_mutual_funds, get_fixed_income, get_commodities,
                       get_asset_price, submit_pending_asset, get_pending_assets_for_user,
-                      rpc_holdings_with_prices)
+                      rpc_holdings_with_prices, sb)
 from utils.crypto import inr, fmt_date, indian_format
 
 ASSET_CLASSES = {
@@ -229,6 +229,27 @@ def render():
                 else:
                     interest_rate = None
 
+                # SIP option for Mutual Funds
+                sip_mode = False
+                sip_frequency = None
+                sip_amount_val = 0.0
+                sip_start = None
+                if ac == "Mutual Fund":
+                    inv_type = st.radio("Investment Type",
+                                        ["Lump Sum", "SIP (Systematic Investment Plan)"],
+                                        horizontal=True, key="mf_inv_type")
+                    sip_mode = (inv_type == "SIP (Systematic Investment Plan)")
+                    if sip_mode:
+                        sip_frequency = st.selectbox(
+                            "SIP Frequency",
+                            ["Daily","Weekly","Monthly","Quarterly","Annual"],
+                            index=2  # default monthly
+                        )
+                        c1, c2 = st.columns(2)
+                        sip_amount_val = c1.number_input("SIP Amount (₹)", min_value=100.0, step=500.0, value=1000.0)
+                        sip_start = c2.date_input("SIP Start Date")
+                        st.caption("Enter the total units accumulated so far as Qty, and average NAV as Buy Price.")
+
                 if utype == "shares":
                     qty = float(st.number_input("Quantity (shares)", min_value=1, step=1, value=1, format="%d"))
                 elif utype == "amount":
@@ -236,7 +257,8 @@ def render():
                 elif utype == "grams":
                     qty = st.number_input("Quantity (grams)", min_value=0.01, step=0.1, format="%.2f")
                 else:
-                    qty = st.number_input("Units", min_value=0.001, step=0.001, format="%.3f")
+                    qty = st.number_input("Units" if not sip_mode else "Total Units Accumulated",
+                                          min_value=0.001, step=0.001, format="%.3f")
 
                 avg_cost = st.number_input(
                     "Investment Amount (₹)" if utype=="amount" else "Buy Price / NAV (₹)",
@@ -251,10 +273,44 @@ def render():
                         note_str = notes
                         if interest_rate is not None and interest_rate > 0:
                             note_str = f"rate:{interest_rate:.2f}%" + (f" | {notes}" if notes else "")
-                        # Use sub-category from the selected asset
-                        sub = next((d.get("sub_class","") for d in get_assets(ac) if d["symbol"]==symbol), ASSET_CLASSES[ac]["sub"][0])
-                        add_holding(pf_id, symbol, ac, sub, float(qty), utype, avg_cost, note_str)
-                        st.success(f"Added {qty:g} of {symbol}"); st.rerun()
+                        if sip_mode and sip_frequency:
+                            note_str = (f"sip:{sip_frequency.lower()}:₹{sip_amount_val:g}"
+                                        + (f" | {notes}" if notes else ""))
+
+                        # Get sub from asset data
+                        sub = next((d.get("sub_class","") for d in get_assets(ac)
+                                    if d["symbol"]==symbol), ASSET_CLASSES[ac]["sub"][0])
+                        if not sub:
+                            sub = ASSET_CLASSES[ac]["sub"][0]
+
+                        # Store holding with SIP metadata
+                        from datetime import date as _date
+                        sb().table("holdings").insert({
+                            "portfolio_id":   pf_id,
+                            "symbol":         symbol,
+                            "asset_class":    ac,
+                            "sub_class":      sub,
+                            "quantity":       float(qty),
+                            "unit_type":      utype,
+                            "avg_cost":       avg_cost,
+                            "notes":          note_str,
+                            "is_manual":      False,
+                            "investment_type": "sip" if sip_mode else "lump_sum",
+                            "sip_frequency":  sip_frequency.lower() if sip_mode and sip_frequency else None,
+                            "sip_amount":     sip_amount_val if sip_mode else 0,
+                            "sip_start_date": str(sip_start) if sip_mode and sip_start else None,
+                        }).execute()
+                        sb().table("transactions").insert({
+                            "portfolio_id": pf_id,
+                            "symbol":       symbol,
+                            "txn_type":     "SIP" if sip_mode else "BUY",
+                            "quantity":     float(qty),
+                            "price":        avg_cost,
+                            "amount":       float(qty) * avg_cost,
+                            "txn_date":     str(sip_start) if sip_mode and sip_start else str(_date.today()),
+                        }).execute()
+                        st.success(f"Added {'SIP — ' if sip_mode else ''}{qty:g} units of {symbol}")
+                        st.rerun()
 
     # ── MANUAL ENTRY ──────────────────────────────────────────────────────
     with tabs[3]:

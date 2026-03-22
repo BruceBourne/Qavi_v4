@@ -217,17 +217,56 @@ def render():
                                 ex_syms.update(r["symbol"] for r in _batch)
                                 if len(_batch) < 1000: break
                                 _pg += 1
-                            new_assets = [
-                                {"symbol":sym,"name":nm,"asset_class":"Equity",
-                                 "sub_class":_classify_equity(nm),"exchange":"NSE",
-                                 "is_active":True,"unit_type":"shares"}
-                                for sym,nm in asset_rows if sym not in ex_syms
+                            # Name enrichment: if name == symbol (ticker only), use proper name from df
+                            # NSE bhavcopy columns: SYMBOL, SERIES, ISIN, COMPANY (varies by format)
+                            name_lookup = {}
+                            for sym_n, nm_n in asset_rows:
+                                if nm_n and nm_n != sym_n:
+                                    name_lookup[sym_n] = nm_n
+                            # Also check bhavcopy for company name columns
+                            for col_name in ["company","company_name","sc_name","isin_name",
+                                             "symbol_description","long_name"]:
+                                col_series = _col(df, col_name)
+                                if col_series is not None:
+                                    for i in range(len(df)):
+                                        sym_r = str(sym_c.iloc[i]).strip().upper()
+                                        val   = str(col_series.iloc[i]).strip()
+                                        if val and val != sym_r and val.lower() != "nan":
+                                            name_lookup[sym_r] = val
+                                    break
+                            new_assets = []
+                            for sym_n, nm_n in asset_rows:
+                                if sym_n not in ex_syms:
+                                    final_name = name_lookup.get(sym_n, nm_n)
+                                    # If name still equals symbol, mark as needing enrichment
+                                    if final_name == sym_n:
+                                        final_name = sym_n  # keep as-is, admin can enrich later
+                                    new_assets.append({
+                                        "symbol": sym_n,
+                                        "name": final_name,
+                                        "asset_class": "Equity",
+                                        "sub_class": _classify_equity(final_name),
+                                        "exchange": "NSE",
+                                        "is_active": True,
+                                        "unit_type": "shares",
+                                    })
+                            # Also update name for existing assets that have symbol==name
+                            update_names = [
+                                (sym_n, name_lookup[sym_n])
+                                for sym_n, nm_n in asset_rows
+                                if sym_n in ex_syms and sym_n in name_lookup
                             ]
                             if new_assets:
-                                # Batch insert new assets 200 at a time
                                 for j in range(0, len(new_assets), 200):
                                     sb().table("assets").upsert(new_assets[j:j+200], on_conflict="symbol").execute()
                                 new_count = len(new_assets)
+                            if update_names:
+                                for sym_n, nm_n in update_names[:500]:  # cap at 500 updates
+                                    try:
+                                        sb().table("assets").update({"name": nm_n}).eq("symbol", sym_n).eq("name", sym_n).execute()
+                                    except Exception: pass
+                            # Fix empty sub_class for existing assets from this upload
+                            sb().table("assets").update({"sub_class":"Unclassified"})                                .eq("sub_class","").eq("asset_class","Equity").execute()
                         except Exception as e:
                             st.warning(f"Ticker registration: {e}")
 

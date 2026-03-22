@@ -607,8 +607,18 @@ def render():
 
         calc = st.session_state.get("_inv_calc")
         if calc:
-            amount = calc["amount"]
-            detail = calc.get("detail", "")
+            amount    = calc["amount"]
+            detail    = calc.get("detail", "")
+            # Read all values from session state — not outer widget scope
+            # (outer scope variables are undefined after st.rerun())
+            _fee_type  = calc["fee_type"]
+            _fee_value = calc["fee_value"]
+            _freq      = calc["freq"]
+            _pf_val    = calc["pf_val"]
+            _n_mtg     = calc["n_meetings"]
+            _pf_from   = calc["pf_from"]
+            _pf_to     = calc["pf_to"]
+
             st.markdown(f"""
             <div style="background:#1E2535;border:1px solid #2ECC7A;border-radius:10px;
                 padding:1rem 1.2rem;margin:.4rem 0">
@@ -621,28 +631,30 @@ def render():
                 due = str(pay_basis + timedelta(days=15))
                 try:
                     inv_num = create_invoice(
-                        advisor_id=user["id"], ac_id=cl_id, fee_type=fee_type,
-                        fee_value=fee_value, fee_frequency=freq, amount=amount,
-                        portfolio_value=pf_val, num_meetings=n_mtg,
-                        period_from=str(pf_from), period_to=str(pf_to), notes=notes,
+                        advisor_id=user["id"], ac_id=cl_id,
+                        fee_type=_fee_type, fee_value=_fee_value, fee_frequency=_freq,
+                        amount=amount, portfolio_value=_pf_val, num_meetings=_n_mtg,
+                        period_from=_pf_from, period_to=_pf_to, notes=notes,
                         invoice_date=str(inv_date), due_date=due,
                     )
-                    st.session_state.pop("_inv_calc",None)
+                    st.session_state.pop("_inv_calc", None)
                     st.success(f"Invoice {inv_num} created!"); st.rerun()
                 except Exception as e:
                     if "duplicate" in str(e).lower() or "23505" in str(e):
                         import time; time.sleep(0.5)
                         try:
                             inv_num = create_invoice(
-                                advisor_id=user["id"], ac_id=cl_id, fee_type=fee_type,
-                                fee_value=fee_value, fee_frequency=freq, amount=amount,
-                                portfolio_value=pf_val, num_meetings=n_mtg,
-                                period_from=str(pf_from), period_to=str(pf_to), notes=notes,
+                                advisor_id=user["id"], ac_id=cl_id,
+                                fee_type=_fee_type, fee_value=_fee_value, fee_frequency=_freq,
+                                amount=amount, portfolio_value=_pf_val, num_meetings=_n_mtg,
+                                period_from=_pf_from, period_to=_pf_to, notes=notes,
                                 invoice_date=str(inv_date), due_date=due,
                             )
-                            st.session_state.pop("_inv_calc",None)
+                            st.session_state.pop("_inv_calc", None)
                             st.success(f"Invoice {inv_num} created!"); st.rerun()
-                        except Exception as e2: st.error(f"Error: {e2}")
-                    else: st.error(f"Error: {e}")
+                        except Exception as e2:
+                            st.error(f"Error: {e2}")
+                    else:
+                        st.error(f"Error: {e}")
         else:
             st.info("Configure fee above then click **Calculate Fee** before generating.")

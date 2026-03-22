@@ -2,17 +2,18 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 from utils.session import navigate
-from utils.db import get_advisor_clients, get_portfolios_for_ac, get_portfolio_holdings, get_asset_price, get_invoices_for_advisor
+from utils.db import get_advisor_clients, get_portfolios_for_ac, get_portfolio_holdings, get_all_prices_map, get_invoices_for_advisor
 from utils.crypto import inr, indian_format
 from collections import defaultdict
 
 FEE_FREQS = {"annual":"Annual","quarterly":"Quarterly","monthly":"Monthly","daily":"Daily"}
 
-def _aum(ac_id):
+def _aum(ac_id, pmap):
     total = 0.0
     for pf in get_portfolios_for_ac(ac_id):
         for h in get_portfolio_holdings(pf["id"]):
-            p, _ = get_asset_price(h["symbol"])
+            r = pmap.get(h["symbol"])
+            p = r["close"] if r else 0.0
             total += h["quantity"] * (p or h["avg_cost"])
     return total
 
@@ -26,6 +27,7 @@ def render():
     user = st.session_state.user
     clients  = get_advisor_clients(user["id"])
     invoices = get_invoices_for_advisor(user["id"])
+    pmap     = get_all_prices_map()   # fetch once
 
     st.markdown('<div class="page-title">Fee Strategy Analyser</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-sub">Compare which fee model earns you the most</div>', unsafe_allow_html=True)
@@ -48,7 +50,7 @@ def render():
         # Per-client data
         rows = []
         for cl in clients:
-            aum   = _aum(cl["id"])
+            aum   = _aum(cl["id"], pmap)
             ot    = ot_fee
             cons  = cons_fee * avg_mtgs
             freq_map = {"annual":1,"quarterly":4,"monthly":12,"daily":365}

@@ -3,24 +3,29 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
 from utils.session import navigate
 from utils.db import (get_advisor_clients, get_client_advisors, get_portfolios_for_ac,
-                      get_private_portfolios, get_portfolio_holdings, get_asset_price,
-                      create_portfolio, update_portfolio, delete_portfolio)
+                      get_private_portfolios, get_portfolio_holdings, get_all_prices_map,
+                      rpc_portfolio_summary, create_portfolio, update_portfolio, delete_portfolio)
 from utils.crypto import inr, fmt_date, title_case, indian_format
 from datetime import date
 from collections import defaultdict
 
-def _stats(holdings):
+def _price(sym, pmap):
+    """Local price lookup — no DB call."""
+    r = pmap.get(sym)
+    return (r["close"], r.get("change_pct",0)) if r else (0.0, 0.0)
+
+def _stats(holdings, pmap):
     inv = cur = 0.0
     for h in holdings:
-        p, _ = get_asset_price(h["symbol"])
+        p, _ = _price(h["symbol"], pmap)
         inv += h["quantity"] * h["avg_cost"]
         cur += h["quantity"] * (p or h["avg_cost"])
     return inv, cur
 
-def _alloc_bars(holdings, total_cur):
+def _alloc_bars(holdings, total_cur, pmap):
     class_vals = defaultdict(float)
     for h in holdings:
-        p, _ = get_asset_price(h["symbol"])
+        p, _ = _price(h["symbol"], pmap)
         class_vals[h["asset_class"]] += h["quantity"] * (p or h["avg_cost"])
     colors = {"Equity":"#4F7EFF","Mutual Fund":"#A855F7","ETF":"#F5B731",
               "Bond":"#2ECC7A","Bank FD":"#14B8A6","Commodity":"#F97316"}
@@ -33,15 +38,17 @@ def _alloc_bars(holdings, total_cur):
             f'<div style="margin-bottom:.55rem">'
             f'<div style="display:flex;justify-content:space-between;margin-bottom:.22rem">'
             f'<span style="font-size:.76rem;color:#C8D0E0">{cls}</span>'
-            f'<span style="font-size:.76rem;color:{c};font-weight:600">{pct:.0f}% · ₹{indian_format(val)}</span>'
+            f'<span style="font-size:.76rem;color:{c};font-weight:600">'
+            f'{pct:.0f}% · ₹{indian_format(val)}</span>'
             f'</div><div style="background:#1E2535;border-radius:3px;height:5px">'
-            f'<div style="background:{c};width:{pct:.1f}%;height:100%;border-radius:3px"></div></div></div>'
+            f'<div style="background:{c};width:{pct:.1f}%;height:100%;border-radius:3px">'
+            f'</div></div></div>'
         )
     return html
 
-def _pf_card(pf, key_sfx, show_edit=True):
+def _pf_card(pf, key_sfx, pmap, show_edit=True):
     hs       = get_portfolio_holdings(pf["id"])
-    inv, cur = _stats(hs)
+    inv, cur = _stats(hs, pmap)
     pnl      = cur - inv
     pnl_pct  = (pnl / inv * 100) if inv else 0
     vis      = "🟢 Shared" if pf.get("visibility") == "shared" else "🔒 Private"
@@ -54,7 +61,7 @@ def _pf_card(pf, key_sfx, show_edit=True):
         m4.metric("Holdings",      len(hs))
 
         if hs:
-            st.markdown(_alloc_bars(hs, cur), unsafe_allow_html=True)
+            st.markdown(_alloc_bars(hs, cur, pmap), unsafe_allow_html=True)
 
         btn_cols = st.columns(4 if show_edit else 2)
         if btn_cols[0].button("📋 Holdings", key=f"h_{pf['id']}_{key_sfx}", use_container_width=True):
@@ -116,6 +123,9 @@ def render():
     role = user["role"]
     st.markdown('<div class="page-title">Portfolios</div>', unsafe_allow_html=True)
 
+    # Fetch prices once — used by all pf_cards on this page
+    pmap = get_all_prices_map()
+
     # ── ADVISOR ────────────────────────────────────────────────────────────
     if role == "advisor":
         clients = get_advisor_clients(user["id"])
@@ -132,7 +142,7 @@ def render():
         tab1, tab2 = st.tabs([f"  📁 Portfolios ({len(pfs)})  ", "  ➕ New Portfolio  "])
         with tab1:
             if not pfs: st.info("No portfolios for this client yet.")
-            for pf in pfs: _pf_card(pf, "adv")
+            for pf in pfs: _pf_card(pf, "adv", pmap)
         with tab2:
             _new_pf_form(ac_id, user["id"], "advisor", ["shared", "private"], "adv")
 
@@ -153,10 +163,9 @@ def render():
                 st.info("No portfolios yet. Create a private one below, or ask your advisor to share one.")
             for pf in all_pfs:
                 is_own = pf.get("visibility") == "private" and pf.get("owner_type") == "client"
-                _pf_card(pf, "cli", show_edit=is_own)
+                _pf_card(pf, "cli", pmap, show_edit=is_own)
         with tab2:
             st.caption("Private portfolios are visible only to you.")
-            # Client can always create — with or without an advisor
             if advisors:
                 ac_opts = {a["id"]: a.get("advisor_name", "Advisor") for a in advisors}
                 ac_sel  = st.selectbox("Under Advisor", list(ac_opts.keys()),
