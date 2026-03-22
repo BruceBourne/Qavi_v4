@@ -4,7 +4,8 @@ import streamlit as st
 from utils.db import (get_advisor_clients, get_advisor_client, get_invoices_for_advisor,
                       create_invoice, update_invoice_status, get_portfolios_for_ac,
                       get_portfolio_holdings, get_asset_price, get_meeting_count_completed,
-                      get_user_by_id, sb, decrypt_user, get_fixed_income)
+                      get_user_by_id, sb, decrypt_user, get_fixed_income,
+                      rpc_calc_invoice)
 from utils.crypto import inr, indian_format, fmt_date, title_case
 from utils.session import navigate
 from utils.market import is_market_open
@@ -93,7 +94,7 @@ def _get_fi_info(symbol):
 # Single consistent margin used BOTH in browser and in print: 14mm all sides on A4 landscape.
 # The .page div mirrors that margin so browser view looks identical to print.
 
-def _invoice_html(inv, adv_user, client):
+def _invoice_html(inv, adv_user, client, rpc_rows=None):
     adv_name  = title_case(adv_user.get("full_name") or adv_user.get("username",""))
     dec_adv   = decrypt_user(adv_user) if adv_user else {}
     adv_phone = dec_adv.get("phone","") or "—"
@@ -105,24 +106,44 @@ def _invoice_html(inv, adv_user, client):
     total_eq_buy = total_eq_cur = 0.0
     total_db_buy = total_db_cur = 0.0
 
-    for pf in get_portfolios_for_ac(inv["advisor_client_id"]):
-        for h in get_portfolio_holdings(pf["id"]):
-            p,_   = get_asset_price(h["symbol"])
-            cp    = p or h["avg_cost"]
-            bv    = h["quantity"] * h["avg_cost"]
-            cv    = h["quantity"] * cp
-            pnl   = cv - bv
-            ppct  = ((cp-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0
-            ac    = h.get("asset_class","")
+    if rpc_rows:
+        # Use pre-calculated data from RPC — zero extra DB calls
+        for r in rpc_rows:
+            ac   = r.get("holding_ac","")
+            bv   = r.get("holding_buy_val", 0)
+            cv   = r.get("holding_cur_val", 0)
+            pnl  = r.get("holding_pnl", 0)
+            ppct = r.get("holding_pnl_pct", 0)
             if _is_debt(ac):
                 total_db_buy += bv; total_db_cur += cv
-                rate, mat, _ = _get_fi_info(h["symbol"])
-                rate = _note_rate(h.get("notes","")) or rate
-                mat_s = fmt_date(mat) if mat and mat not in ("—","N/A","") else "—"
-                debt_h.append((h["symbol"], ac, h["quantity"], bv, rate, mat_s))
+                rate  = r.get("fi_interest_rate", 0) or 0
+                mat_r = r.get("fi_maturity","—") or "—"
+                mat_s = fmt_date(mat_r) if mat_r not in ("—","N/A","") else "—"
+                debt_h.append((r["holding_symbol"], ac, r["holding_qty"], bv, rate, mat_s))
             else:
                 total_eq_buy += bv; total_eq_cur += cv
-                eq_h.append((h["symbol"], ac, h["quantity"], h["avg_cost"], cp, pnl, ppct, bv, cv))
+                eq_h.append((r["holding_symbol"], ac, r["holding_qty"],
+                              r["holding_avg_cost"], r["holding_close"], pnl, ppct, bv, cv))
+    else:
+        # Fallback: query DB directly (used when viewing old invoices without cached RPC data)
+        for pf in get_portfolios_for_ac(inv["advisor_client_id"]):
+            for h in get_portfolio_holdings(pf["id"]):
+                p,_   = get_asset_price(h["symbol"])
+                cp    = p or h["avg_cost"]
+                bv    = h["quantity"] * h["avg_cost"]
+                cv    = h["quantity"] * cp
+                pnl   = cv - bv
+                ppct  = ((cp-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0
+                ac    = h.get("asset_class","")
+                if _is_debt(ac):
+                    total_db_buy += bv; total_db_cur += cv
+                    rate, mat, _ = _get_fi_info(h["symbol"])
+                    rate = _note_rate(h.get("notes","")) or rate
+                    mat_s = fmt_date(mat) if mat and mat not in ("—","N/A","") else "—"
+                    debt_h.append((h["symbol"], ac, h["quantity"], bv, rate, mat_s))
+                else:
+                    total_eq_buy += bv; total_eq_cur += cv
+                    eq_h.append((h["symbol"], ac, h["quantity"], h["avg_cost"], cp, pnl, ppct, bv, cv))
 
     has_eq   = bool(eq_h)
     has_debt = bool(debt_h)
@@ -471,7 +492,14 @@ def render():
                         if b1.button("↩ Unpaid",     key=f"mu_{inv['id']}", use_container_width=True):
                             update_invoice_status(inv["id"],"unpaid"); st.rerun()
 
-                    html_c = _invoice_html(inv, advisor or {}, client)
+                    html_c = _invoice_html(inv, advisor or {}, client,
+                                           rpc_rows=rpc_calc_invoice(
+                                               inv["advisor_client_id"],
+                                               inv.get("period_from", str(date.today().replace(day=1))),
+                                               inv.get("period_to",   str(date.today())),
+                                               inv.get("fee_value",1), inv.get("fee_frequency","annual"),
+                                               inv.get("fee_type","management"), inv.get("num_meetings",0)
+                                           ))
                     b64    = base64.b64encode(html_c.encode()).decode()
                     b2.markdown(f'<a href="data:text/html;base64,{b64}" download="{inv["invoice_number"]}.html" style="display:block;text-align:center;background:#161B27;color:#F0F4FF;padding:.42rem .9rem;border-radius:8px;border:1px solid #252D40;font-size:.84rem;text-decoration:none">📥 Download</a>', unsafe_allow_html=True)
                     b3.markdown(f'<a href="data:text/html;base64,{b64}" target="_blank" style="display:block;text-align:center;background:#161B27;color:#F0F4FF;padding:.42rem .9rem;border-radius:8px;border:1px solid #252D40;font-size:.84rem;text-decoration:none">🔍 Preview</a>', unsafe_allow_html=True)
@@ -495,17 +523,7 @@ def render():
         cl_id  = st.selectbox("Client", [c["id"] for c in clients],
                               format_func=lambda x: title_case(next(c["client_name"] for c in clients if c["id"]==x)))
         client = next(c for c in clients if c["id"]==cl_id)
-        pf_val, pf_h = _pf_value_and_holdings(cl_id)
         num_mtg = get_meeting_count_completed(cl_id)
-
-        dv  = sum(h["quantity"]*(get_asset_price(h["symbol"])[0] or h["avg_cost"])
-                  for h in pf_h if _is_debt(h.get("asset_class","")))
-        ndv = pf_val - dv
-        parts = [f"Total AUM: ₹{indian_format(pf_val)}"]
-        if dv > 0:  parts.append(f"Debt: ₹{indian_format(dv)}")
-        if ndv > 0: parts.append(f"Market: ₹{indian_format(ndv)}")
-        parts.append(f"Meetings: {num_mtg}")
-        st.markdown(f'<p style="font-size:.82rem;color:#8892AA">{" · ".join(parts)}</p>', unsafe_allow_html=True)
 
         st.markdown("#### Dates")
         dc1,dc2 = st.columns(2)
@@ -523,7 +541,6 @@ def render():
         freq = "annual"
         if fee_type == "management":
             freq = fc2.selectbox("Billing Frequency", list(FEE_FREQS.keys()), format_func=lambda x: FEE_FREQS[x])
-            if dv > 0: st.caption("Debt assets always use daily accrual.")
         else:
             fc2.empty()
 
@@ -532,39 +549,66 @@ def render():
 
         st.markdown("---")
         if st.button("🧮 Calculate Fee", use_container_width=True):
-            amount = calc_amount(fee_type, fee_value, freq, pf_val, n_mtg,
-                                 pf_from, pf_to, holdings=pf_h if fee_type=="management" else None)
-            n = _count_periods(pf_from, pf_to, freq) if fee_type=="management" else 0
+            with st.spinner("Calculating…"):
+                # Single RPC call — all arithmetic done in Postgres
+                rows = rpc_calc_invoice(cl_id, pf_from, pf_to,
+                                        fee_value, freq, fee_type, n_mtg)
+
+            if rows:
+                r0       = rows[0]  # fee summary is same on every row
+                amount   = r0.get("fee_amount", 0)
+                dv       = r0.get("debt_aum", 0)
+                ndv      = r0.get("non_debt_aum", 0)
+                pf_val   = r0.get("total_aum", 0)
+                df       = r0.get("debt_fee", 0)
+                ndf      = r0.get("non_debt_fee", 0)
+            else:
+                # RPC not yet deployed — fall back to Python
+                pf_val, pf_h = _pf_value_and_holdings(cl_id)
+                dv  = sum(h["quantity"]*(get_asset_price(h["symbol"])[0] or h["avg_cost"])
+                          for h in pf_h if _is_debt(h.get("asset_class","")))
+                ndv = pf_val - dv
+                amount = calc_amount(fee_type, fee_value, freq, pf_val, n_mtg,
+                                     pf_from, pf_to, holdings=pf_h if fee_type=="management" else None)
+                df = ndf = 0
+
+            # Build breakdown string
+            days    = (pf_to - pf_from).days
+            if fee_type == "management":
+                parts_c = []
+                if dv > 0:
+                    parts_c.append(f"Debt ₹{indian_format(dv)} × {fee_value}%÷365 × {days}d = ₹{indian_format(df)}")
+                if ndv > 0:
+                    div_map = {"annual":1,"quarterly":4,"monthly":12,"daily":365}
+                    div     = div_map.get(freq, 12)
+                    parts_c.append(f"Market ₹{indian_format(ndv)} × {fee_value}%÷{div} = ₹{indian_format(ndf)}")
+                if not parts_c:
+                    parts_c.append(f"₹{indian_format(pf_val)} × {fee_value}%")
+                detail = " + ".join(parts_c)
+            elif fee_type == "consultation":
+                detail = f"{n_mtg} meetings × ₹{indian_format(fee_value)}"
+            else:
+                detail = "Fixed one-time fee"
+
+            # AUM info line
+            info_parts = [f"Total AUM: ₹{indian_format(pf_val)}"]
+            if dv > 0:  info_parts.append(f"Debt: ₹{indian_format(dv)}")
+            if ndv > 0: info_parts.append(f"Market: ₹{indian_format(ndv)}")
+            st.markdown(f'<p style="font-size:.82rem;color:#8892AA">{" · ".join(info_parts)}</p>', unsafe_allow_html=True)
+
             st.session_state["_inv_calc"] = {
-                "amount":amount,"fee_type":fee_type,"fee_value":fee_value,
-                "freq":freq,"pf_val":pf_val,"n_meetings":n_mtg,
-                "pf_from":str(pf_from),"pf_to":str(pf_to),"n":n,"dv":dv,"ndv":ndv,
+                "amount": amount, "fee_type": fee_type, "fee_value": fee_value,
+                "freq": freq, "pf_val": pf_val, "n_meetings": n_mtg,
+                "pf_from": str(pf_from), "pf_to": str(pf_to),
+                "dv": dv, "ndv": ndv, "detail": detail,
+                "rpc_rows": rows,   # store for invoice HTML generation
             }
             st.rerun()
 
         calc = st.session_state.get("_inv_calc")
         if calc:
             amount = calc["amount"]
-            if calc["fee_type"]=="management":
-                days  = (pf_to-pf_from).days
-                n     = int(calc["n"])
-                parts_c = []
-                if calc["dv"]>0:
-                    df = round(calc["dv"]*(calc["fee_value"]/100/365)*days,2)
-                    parts_c.append(f"Debt ₹{indian_format(calc['dv'])} × {calc['fee_value']}%÷365 × {days}d = ₹{indian_format(df)}")
-                if calc["ndv"]>0:
-                    div = {"annual":1,"quarterly":4,"monthly":12}.get(calc["freq"],12)
-                    nf  = round(calc["ndv"]*(calc["fee_value"]/100/div)*n,2)
-                    parts_c.append(f"Market ₹{indian_format(calc['ndv'])} × {calc['fee_value']}%÷{div} × {n} period(s) = ₹{indian_format(nf)}")
-                if not parts_c:
-                    div = {"annual":1,"quarterly":4,"monthly":12,"daily":365}.get(calc["freq"],12)
-                    parts_c.append(f"₹{indian_format(calc['pf_val'])} × {calc['fee_value']}%÷{div} × {n or days}")
-                detail = " + ".join(parts_c)
-            elif calc["fee_type"]=="consultation":
-                detail = f"{calc['n_meetings']} meetings × ₹{indian_format(calc['fee_value'])}"
-            else:
-                detail = "Fixed one-time fee"
-
+            detail = calc.get("detail", "")
             st.markdown(f"""
             <div style="background:#1E2535;border:1px solid #2ECC7A;border-radius:10px;
                 padding:1rem 1.2rem;margin:.4rem 0">

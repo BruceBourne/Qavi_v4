@@ -6,7 +6,8 @@ from utils.db import (get_client_advisors, get_advisor_clients, get_portfolios_f
                       get_private_portfolios, get_portfolio_holdings, get_transactions,
                       get_portfolio_by_id, add_holding, remove_holding,
                       get_assets, get_mutual_funds, get_fixed_income, get_commodities,
-                      get_asset_price, submit_pending_asset, get_pending_assets_for_user)
+                      get_asset_price, submit_pending_asset, get_pending_assets_for_user,
+                      rpc_holdings_with_prices)
 from utils.crypto import inr, fmt_date, indian_format
 
 ASSET_CLASSES = {
@@ -99,21 +100,39 @@ def render():
 
     # ── HOLDINGS ──────────────────────────────────────────────────────────
     with tabs[0]:
-        if not holdings:
+        # Single DB call returns holdings + prices + P&L pre-calculated
+        rpc_h = rpc_holdings_with_prices(pf_id)
+        if not rpc_h:
+            # Fallback if RPC not yet deployed
+            rpc_h = []
+            for h in holdings:
+                p, chg = get_asset_price(h["symbol"])
+                bv = h["quantity"]*h["avg_cost"]
+                cv = h["quantity"]*(p or h["avg_cost"])
+                rpc_h.append({**h,
+                    "close_price": p, "change_pct": chg,
+                    "buy_value": bv, "current_value": cv,
+                    "pnl": cv-bv,
+                    "pnl_pct": ((p-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0
+                })
+
+        if not rpc_h:
             st.info("No holdings yet.")
         else:
             hdr = st.columns([2.5,1.2,1.2,1.5,1.5,2,0.5] if can_edit else [2.5,1.2,1.2,1.5,1.5,2])
             for col,lbl in zip(hdr,["Symbol","Asset","Qty","Buy Cost","Closing Price","P&L"]+([""]*1 if can_edit else [])):
                 col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
-            for h in sorted(holdings, key=lambda x: -(get_asset_price(x["symbol"])[0]*x["quantity"])):
-                p, chg = get_asset_price(h["symbol"])
-                hpnl   = (p-h["avg_cost"])*h["quantity"]
-                hpct   = ((p-h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0
-                pc     = "#2ECC7A" if hpnl>=0 else "#FF5A5A"
-                cc     = "#2ECC7A" if chg>=0  else "#FF5A5A"
-                flag   = "⚠️ " if h.get("is_manual") and not h.get("is_verified") else ""
-                hc = st.columns([2.5,1.2,1.2,1.5,1.5,2,0.5] if can_edit else [2.5,1.2,1.2,1.5,1.5,2])
+
+            for h in rpc_h:
+                p    = h.get("close_price", 0)
+                chg  = h.get("change_pct",  0)
+                hpnl = h.get("pnl", 0)
+                hpct = h.get("pnl_pct", 0)
+                pc   = "#2ECC7A" if hpnl>=0 else "#FF5A5A"
+                cc   = "#2ECC7A" if chg>=0  else "#FF5A5A"
+                flag = "⚠️ " if h.get("is_manual") and not h.get("is_verified") else ""
+                hc   = st.columns([2.5,1.2,1.2,1.5,1.5,2,0.5] if can_edit else [2.5,1.2,1.2,1.5,1.5,2])
                 hc[0].markdown(f"<div style='font-weight:600;font-size:.88rem'>{flag}{h['symbol']}</div><div style='font-size:.72rem;color:#8892AA'>{h.get('sub_class','')}</div>", unsafe_allow_html=True)
                 hc[1].markdown(f"<span class='badge badge-{h['asset_class'][:2].lower()}'>{h['asset_class'][:3]}</span>", unsafe_allow_html=True)
                 hc[2].markdown(f"<div style='font-size:.84rem'>{h['quantity']:g} {h.get('unit_type','')}</div>", unsafe_allow_html=True)
