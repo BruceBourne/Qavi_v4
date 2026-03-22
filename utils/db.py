@@ -34,6 +34,7 @@ def clear_market_cache():
     """Clear all Streamlit data cache so market pages re-fetch from DB."""
     get_all_prices_map.clear()
     get_assets.clear()
+    get_assets_map.clear()
     get_mutual_funds.clear()
     get_fixed_income.clear()
     get_commodities.clear()
@@ -419,7 +420,23 @@ def get_price_history(symbol: str, days: int = 365):
     return r.data or []
 
 @st.cache_data(ttl=300)
-def get_assets(asset_class=None, sub_class=None, search=None):
+def get_assets_map():
+    """Returns {symbol: {name, sector, sub_class, asset_class}} — one call, all assets."""
+    result = {}
+    page   = 0
+    PAGE   = 1000
+    while True:
+        batch = (sb().table("assets")
+                 .select("symbol,name,sector,sub_class,asset_class")
+                 .eq("is_active", True)
+                 .range(page * PAGE, (page + 1) * PAGE - 1)
+                 .execute().data or [])
+        for row in batch:
+            result[row["symbol"]] = row
+        if len(batch) < PAGE:
+            break
+        page += 1
+    return result
     """Fetches all assets — paginates in 1000-row batches to bypass Supabase default limit."""
     q_base = sb().table("assets").select("*").eq("is_active", True)
     if asset_class: q_base = q_base.eq("asset_class", asset_class)
