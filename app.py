@@ -36,6 +36,8 @@ import pages.clients as clients
 import pages.market_upload as market_upload
 import pages.data_management as data_management
 import pages.stock_enrichment as stock_enrichment
+import pages.owner as owner
+import pages.feedback as feedback
 
 init_session()
 inject_styles()
@@ -90,6 +92,8 @@ PAGES = {
     "market_upload":      market_upload,
     "data_management":    data_management,
     "stock_enrichment":   stock_enrichment,
+    "owner":              owner,
+    "feedback":           feedback,
     "meetings":           meetings,
     "invoices":           invoices,
     "fee_analyser":       fee_analyser,
