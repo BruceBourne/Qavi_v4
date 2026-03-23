@@ -530,3 +530,16 @@ def verify_asset_exists_nse(symbol: str) -> bool:
         return r.status_code == 200
     except Exception:
         return False
+
+# ── ACCOUNT MANAGEMENT ────────────────────────────────────────────────────
+
+def upgrade_to_owner(uid: str):
+    """Elevate an existing account to owner role."""
+    sb().table("users").update({"role": "owner"}).eq("id", uid).execute()
+
+def delete_user_account(uid: str):
+    """
+    Delete a user account and all associated data.
+    Cascades via FK: advisor_clients → portfolios → holdings/transactions.
+    """
+    sb().table("users").delete().eq("id", uid).execute()
