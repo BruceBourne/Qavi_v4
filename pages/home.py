@@ -97,3 +97,18 @@ def render():
             <p class="fd">Your data is encrypted end-to-end. Invite-only platform. Private portfolios visible only to you.</p></div>
     </div>
     """, unsafe_allow_html=True)
+
+    # Disclaimer at bottom of home page
+    st.markdown("""
+    <div style="margin-top:3rem;padding:1.2rem 1.5rem;background:#0D1117;
+        border-top:1px solid #1A2030;border-radius:0 0 12px 12px">
+        <div style="font-size:.72rem;color:#4E5A70;line-height:2">
+            <b style="color:#5A6880">Disclaimer</b> &nbsp;·&nbsp;
+            Qavi is a portfolio analytics and intelligence platform designed to help users
+            understand their investments across asset classes. Qavi does not provide investment
+            advice, recommendations or execution services, and is not a registered investment
+            advisor with SEBI. All analytics, risk metrics and scenario models are for
+            informational purposes only. Past performance is not indicative of future results.
+        </div>
+    </div>
+    """, unsafe_allow_html=True)

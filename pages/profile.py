@@ -130,7 +130,7 @@ def render():
                 st.success("Profile updated!"); st.rerun()
 
         # ── Change password ───────────────────────────────────────────────
-        st.markdown("<br>#### Change Password")
+        st.markdown(""); st.markdown("#### Change Password")
         with st.form("pw_form"):
             from utils.crypto import hash_password
             from utils.db import sb
@@ -150,3 +150,14 @@ def render():
                     from utils.db import update_password
                     update_password(user["id"], hash_password(new_pw))
                     st.success("Password updated successfully.")
+
+    # Disclaimer shown on profile page
+    st.markdown("""
+    <div style="margin-top:2.5rem;padding:1rem 1.2rem;background:#0D1117;
+        border-top:1px solid #1A2030;border-radius:8px;font-size:.71rem;color:#4E5A70;line-height:2">
+        <b style="color:#5A6880">Platform Disclaimer</b> &nbsp;·&nbsp;
+        Qavi is not a SEBI registered investment advisor and does not provide investment advice,
+        recommendations or execution services. All analytics are for informational purposes only.
+    </div>
+    """, unsafe_allow_html=True)
+

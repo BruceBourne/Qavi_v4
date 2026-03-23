@@ -98,6 +98,6 @@ def render():
             except Exception as e:
                 st.error(f"Could not submit feedback: {e}")
 
-    st.markdown("<br>")
+    st.markdown("")
     if st.button("← Back", use_container_width=False):
         navigate("dashboard" if user else "home")

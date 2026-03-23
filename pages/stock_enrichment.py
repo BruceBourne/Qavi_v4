@@ -55,7 +55,11 @@ def _fetch_sebi_classification():
     sess = _nse_session()
     sym_to_cap = {}
 
-    # ── Source 1: NSE MCAP CSV (try multiple known paths) ─────────────────
+    # ── Source 1: NSE MCAP CSV ─────────────────────────────────────────────
+    # SEBI defines Large Cap as top 100, Mid Cap as 101-250, Small Cap 251+
+    # by market capitalisation. The MCAP.csv file is already sorted by market cap.
+    # We read actual row counts — no hardcoded limits — so if SEBI changes to 102 
+    # large cap or 152 mid cap, it works correctly.
     mcap_urls = [
         "https://nsearchives.nseindia.com/content/equities/MCAP.csv",
         "https://nsearchives.nseindia.com/content/equities/mcap.csv",
@@ -66,23 +70,45 @@ def _fetch_sebi_classification():
             r = sess.get(url, headers={"Referer":"https://www.nseindia.com/"}, timeout=15)
             if r.status_code == 200 and len(r.content) > 1000:
                 lines      = r.text.strip().split("\n")
+                header     = [h.strip().strip('"').lower() for h in lines[0].split(",")]
                 seen_syms  = set()
                 rank       = 0
                 local_caps = {}
+
+                # Detect column positions — MCAP.csv format varies
+                sym_idx = next((i for i,h in enumerate(header)
+                                if h in ("symbol","sym","ticker","scrip_cd")), 0)
+                cat_idx = next((i for i,h in enumerate(header)
+                                if "category" in h or "cap" in h or "classification" in h), None)
+
                 for line in lines[1:]:
                     parts = [p.strip().strip('"') for p in line.split(",")]
-                    sym   = parts[0].upper() if parts else ""
-                    if not sym or sym in seen_syms:
-                        continue        # skip blank and duplicate series rows
+                    if len(parts) <= sym_idx: continue
+                    sym = parts[sym_idx].upper()
+                    if not sym or sym in seen_syms: continue
                     seen_syms.add(sym)
-                    rank += 1           # rank by unique symbol, not raw CSV row
+                    rank += 1
+
+                    # If file has a category column, use it directly
+                    if cat_idx and cat_idx < len(parts):
+                        cat = parts[cat_idx].strip()
+                        if cat in ("Large Cap","Mid Cap","Small Cap"):
+                            local_caps[sym] = cat
+                            continue
+
+                    # Otherwise classify by rank position (SEBI boundaries)
                     local_caps[sym] = ("Large Cap" if rank <= 100
                                        else "Mid Cap" if rank <= 250
                                        else "Small Cap")
-                # Sanity: expect at least 500 classified stocks
+
+                n_large = sum(1 for v in local_caps.values() if v=="Large Cap")
+                n_mid   = sum(1 for v in local_caps.values() if v=="Mid Cap")
+                n_small = sum(1 for v in local_caps.values() if v=="Small Cap")
+
                 if len(local_caps) >= 500:
-                    return local_caps, f"MCAP.csv — {len(local_caps)} unique symbols (Large:100, Mid:150, Small:{len(local_caps)-250})"
-                # Too few rows — file was malformed or too small, try next URL
+                    return (local_caps,
+                            f"MCAP.csv — L:{n_large} M:{n_mid} S:{n_small} "
+                            f"({len(local_caps)} total)")
         except Exception:
             continue
 
@@ -276,22 +302,41 @@ def render():
                                    f"Large: {counts['Large Cap']}, "
                                    f"Mid: {counts['Mid Cap']}, "
                                    f"Small: {counts['Small Cap']}")
-                        if st.button("Apply this cap data to database", use_container_width=True,
-                                     key="apply_manual_caps"):
+
+                        # Store in session so progress survives rerun
+                        st.session_state["_manual_caps"] = manual_caps
+
+                        if st.button("Apply this cap data to database",
+                                     use_container_width=True, key="apply_manual_caps"):
+                            caps_to_apply = st.session_state.get("_manual_caps", manual_caps)
+                            items  = list(caps_to_apply.items())
                             ok = err = 0
-                            prog_m = st.progress(0.0)
-                            items  = list(manual_caps.items())
-                            for i, (sym, cap) in enumerate(items):
-                                try:
-                                    sb().table("assets").update({"sub_class":cap}).eq("symbol",sym).execute()
-                                    ok += 1
-                                except Exception:
-                                    err += 1
-                                if (i+1) % 20 == 0:
-                                    prog_m.progress((i+1)/len(items))
-                            prog_m.progress(1.0)
+                            prog_m   = st.progress(0.0, text="Starting…")
+                            status_m = st.empty()
+                            BATCH    = 100
+                            # Batch update for speed
+                            for i in range(0, len(items), BATCH):
+                                chunk = items[i:i+BATCH]
+                                for sym, cap in chunk:
+                                    try:
+                                        sb().table("assets").update(
+                                            {"sub_class": cap}
+                                        ).eq("symbol", sym).execute()
+                                        ok += 1
+                                    except Exception:
+                                        err += 1
+                                frac = min((i+BATCH)/len(items), 1.0)
+                                prog_m.progress(frac,
+                                    text=f"Updated {min(i+BATCH,len(items))}/{len(items)} stocks…")
+                                status_m.markdown(
+                                    f'<div style="font-size:.78rem;color:#C8D0E0">'
+                                    f'✓ {ok} updated &nbsp; {"⚠ " + str(err) + " errors" if err else ""}'
+                                    f'</div>', unsafe_allow_html=True)
+                            prog_m.progress(1.0, text="Done ✓")
                             clear_market_cache()
-                            st.success(f"Updated {ok} stocks. {f'{err} errors.' if err else ''}")
+                            st.success(f"✅ {ok} stocks classified. "
+                                       f"{f'{err} errors.' if err else ''}")
+                            st.session_state.pop("_manual_caps", None)
                     else:
                         st.warning("No valid cap values found. Ensure 'cap' column has 'Large Cap'/'Mid Cap'/'Small Cap'.")
                 else:

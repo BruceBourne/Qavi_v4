@@ -73,7 +73,7 @@ def render():
             col.metric(lbl, f"{v:,}" if isinstance(v,int) else "—")
 
         # Quick links
-        st.markdown("<br>")
+        st.markdown("")
         b1,b2,b3,b4 = st.columns(4)
         if b1.button("📊 Market Upload",  use_container_width=True): navigate("market_upload")
         if b2.button("🔍 Stock Enrichment",use_container_width=True): navigate("stock_enrichment")
@@ -235,7 +235,7 @@ def render():
         </div>
         """, unsafe_allow_html=True)
 
-        st.markdown("<br>#### Generate Key Hashes")
+        st.markdown(""); st.markdown("#### Generate Key Hashes")
         raw_key = st.text_input("Enter a key to hash (for secrets setup)", type="password")
         if raw_key:
             import hashlib

@@ -271,7 +271,7 @@ def render():
                 st.markdown(_bar(sec, val, cur, "#A855F7"), unsafe_allow_html=True)
             st.markdown("</div>", unsafe_allow_html=True)
         else:
-            st.markdown("""<br><div style="background:#0F1117;border:1px solid #252D40;
+            st.markdown(""); st.markdown("""<div style="background:#0F1117;border:1px solid #252D40;
                 border-radius:8px;padding:.7rem 1rem;font-size:.77rem;color:#8892AA">
                 Sector breakdown not available yet. Go to <b>Profile → Stock Enrichment</b>
                 to populate sectors for your holdings.

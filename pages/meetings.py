@@ -141,7 +141,7 @@ def render():
                         gcal = _gcal_link(m.get("title","Meeting"), m["meeting_date"], m["meeting_time"], m["duration_mins"])
                         st.markdown(f'<a href="{gcal}" target="_blank" style="color:#4F7EFF;font-size:.83rem">📅 Add to Google Calendar →</a>', unsafe_allow_html=True)
             if past:
-                st.markdown("<br>#### Past")
+                st.markdown(""); st.markdown("#### Past")
                 for m in past[:10]:
                     sc = {"completed":"#2ECC7A","cancelled":"#FF5A5A","scheduled":"#4F7EFF"}.get(m["status"],"#8892AA")
                     st.markdown(f'<div style="display:flex;justify-content:space-between;padding:.55rem .9rem;background:#161B27;border-radius:8px;margin-bottom:.3rem;border:1px solid #252D40"><span style="font-size:.84rem">{fmt_date(m["meeting_date"])} {m["meeting_time"]} · {m.get("title","Meeting")}</span><span style="color:{sc};font-size:.8rem;font-weight:600">{m["status"].capitalize()}</span></div>', unsafe_allow_html=True)

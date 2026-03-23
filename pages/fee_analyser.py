@@ -138,14 +138,14 @@ def render():
         type_labels = {"one_time":"One-Time","consultation":"Consultation","management":"Management"}
         type_colors = {"one_time":"#4F7EFF","consultation":"#A855F7","management":"#2ECC7A"}
         if by_type:
-            st.markdown("<br>**Collected by Fee Type**")
+            st.markdown(""); st.markdown("**Collected by Fee Type**")
             mv = max(by_type.values()) or 1
             st.markdown('<div style="background:#161B27;border:1px solid #252D40;border-radius:12px;padding:1.2rem 1.4rem">', unsafe_allow_html=True)
             for k,v in sorted(by_type.items(), key=lambda x:-x[1]):
                 st.markdown(_bar(type_labels.get(k,k), v, mv, type_colors.get(k,"#8892AA")), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         if by_client:
-            st.markdown("<br>**Collected by Client**")
+            st.markdown(""); st.markdown("**Collected by Client**")
             mv = max(by_client.values()) or 1
             st.markdown('<div style="background:#161B27;border:1px solid #252D40;border-radius:12px;padding:1.2rem 1.4rem">', unsafe_allow_html=True)
             for name,v in sorted(by_client.items(), key=lambda x:-x[1]):

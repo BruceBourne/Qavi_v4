@@ -90,7 +90,7 @@ def render():
 
         # Simple price chart using ASCII-style HTML bars
         if history:
-            st.markdown("<br>#### Price History (Last 60 Days)")
+            st.markdown(""); st.markdown("#### Price History (Last 60 Days)")
             recent = history[-60:] if len(history) > 60 else history
             if recent:
                 prices_list = [_safe_float(h.get("close") or h.get("nav",0)) for h in recent]

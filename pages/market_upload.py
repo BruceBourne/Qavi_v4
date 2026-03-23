@@ -453,7 +453,7 @@ def render():
                     clear_market_cache()
                     st.success(f"✅ {count} FD rates updated.")
 
-        st.markdown("<br>**Manual update:**")
+        st.markdown(""); st.markdown("**Manual update:**")
         with st.form("manual_fd"):
             try:
                 fds = sb().table("fixed_income").select("symbol,name,interest_rate").eq("asset_class","Bank FD").order("symbol").execute().data or []

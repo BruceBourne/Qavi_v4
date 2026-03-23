@@ -61,7 +61,7 @@ def render():
                 st.caption(f"{tbl}: error — {e}")
 
         # Prices by date range
-        st.markdown("<br>#### Price Data Coverage")
+        st.markdown(""); st.markdown("#### Price Data Coverage")
         try:
             r = sb().table("prices").select("price_date").order("price_date").limit(1).execute()
             oldest = r.data[0]["price_date"] if r.data else "—"
