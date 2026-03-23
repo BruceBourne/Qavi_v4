@@ -108,25 +108,16 @@ PAGES = {
 page = st.session_state.get("page", "home")
 PAGES.get(page, home).render()
 
-# ── FOOTER — shown on every page after render ─────────────────────────────
-st.markdown("""
-<div style="margin-top:3rem;padding:1.2rem 0 .8rem 0;
-    border-top:1px solid #1E2535;text-align:center">
-    <div style="font-size:.72rem;color:#4E5A70;line-height:2;max-width:700px;margin:0 auto">
-        <b style="color:#5A6880">◈ Qavi</b> &nbsp;·&nbsp;
-        Multi-asset portfolio intelligence platform &nbsp;·&nbsp;
-        Unified analytics, risk insights and scenario modelling across financial and physical assets
-        <br>
-        <span style="color:#3A4560">
-        Qavi is not a registered investment advisor with SEBI and does not provide investment advice,
-        recommendations or execution services. All analytics are for informational purposes only.
-        </span>
-        <br>
-        <a href="#" onclick="window.location.reload()" style="color:#3A4560;font-size:.68rem;text-decoration:none">
-        Feedback
-        </a>
-        &nbsp;·&nbsp;
-        <span style="color:#3A4560;font-size:.68rem">© 2025 Qavi</span>
+# ── FOOTER — minimal one-liner on every page ─────────────────────────────
+current_page = st.session_state.get("page","home")
+if current_page not in ("home","login","register"):
+    st.markdown("""
+    <div style="margin-top:2.5rem;padding:.6rem 0;border-top:1px solid #1A2030;
+        display:flex;justify-content:space-between;align-items:center;
+        font-size:.68rem;color:#3A4560">
+        <span>◈ Qavi &nbsp;·&nbsp; Portfolio intelligence platform
+        &nbsp;·&nbsp; Not a SEBI registered advisor &nbsp;·&nbsp;
+        Analytics for informational purposes only</span>
+        <span>© 2025 Qavi</span>
     </div>
-</div>
-""", unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
