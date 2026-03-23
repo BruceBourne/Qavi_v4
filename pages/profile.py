@@ -67,7 +67,7 @@ def render():
                 navigate("owner")
 
         # ── Upgrade to owner (advisor only, not already owner) ────────────
-        if role == "advisor":
+        if role in ("advisor","owner"):
             st.markdown("<br>", unsafe_allow_html=True)
             with st.expander("🔑 Upgrade to Platform Owner"):
                 st.caption("Enter the owner key to upgrade your account.")
@@ -93,7 +93,7 @@ def render():
                 'Permanently deletes your account and all associated data. '
                 'This cannot be undone.</div>',
                 unsafe_allow_html=True)
-            if role == "advisor":
+            if role in ("advisor","owner"):
                 st.caption("All your clients, portfolios, holdings and invoices will also be deleted.")
             if role == "owner":
                 st.caption("Owner accounts cannot be self-deleted. Use another owner account or contact the database admin.")

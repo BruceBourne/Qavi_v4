@@ -105,7 +105,7 @@ def _upsert_batched(rows, table, conflict, prog_start, prog_end, prog_bar, label
 # ── PAGE ──────────────────────────────────────────────────────────────────
 
 def render():
-    if not st.session_state.get("user") or st.session_state.user["role"] != "advisor":
+    if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
 
     st.markdown('<div class="page-title">Market Data Upload</div>', unsafe_allow_html=True)

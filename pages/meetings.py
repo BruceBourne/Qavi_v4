@@ -38,7 +38,7 @@ def render():
     st.markdown('<div class="page-title">Meetings</div>', unsafe_allow_html=True)
 
     # ── ADVISOR ────────────────────────────────────────────────────────────
-    if role == "advisor":
+    if role in ("advisor","owner"):
         meetings  = get_meetings_for_advisor(user["id"])
         requests  = get_pending_requests_for_advisor(user["id"])
         clients   = get_advisor_clients(user["id"])

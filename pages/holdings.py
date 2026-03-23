@@ -64,7 +64,7 @@ def _search(pairs, q):
 
 def _collect_portfolios(user):
     pfs = []
-    if user["role"] == "advisor":
+    if user["role"] in ("advisor","owner"):
         for cl in get_advisor_clients(user["id"]):
             for pf in get_portfolios_for_ac(cl["id"]):
                 pf["_label"] = f"{pf['name']}  [{cl['client_name']}]"; pfs.append(pf)
@@ -97,7 +97,7 @@ def render():
     pf = get_portfolio_by_id(pf_id)
     if not pf: st.error("Portfolio not found."); return
     holdings = get_portfolio_holdings(pf_id)
-    can_edit = user["role"]=="advisor" or (pf["visibility"]=="private" and pf.get("owner_type")=="client")
+    can_edit = user["role"] in ("advisor","owner") or (pf["visibility"]=="private" and pf.get("owner_type")=="client")
 
     inv = sum(h["quantity"]*h["avg_cost"] for h in holdings)
     cur = sum(h["quantity"]*(get_asset_price(h["symbol"])[0] or h["avg_cost"]) for h in holdings)

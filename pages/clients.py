@@ -11,7 +11,7 @@ FEE_FREQS = {"annual": "Annual", "quarterly": "Quarterly", "monthly": "Monthly",
 RISK_OPTS = ["Conservative", "Moderate", "Aggressive"]
 
 def render():
-    if not st.session_state.get("user") or st.session_state.user["role"] != "advisor":
+    if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
     user = st.session_state.user
     clients = get_advisor_clients(user["id"])

@@ -16,11 +16,11 @@ def render():
     col1, _ = st.columns([1, 1.4])
     with col1:
         role_sel   = st.radio("Account type",
-                              ["Investor", "Financial Advisor", "Platform Owner"],
+                              ["Investor", "Financial Advisor"],
                               horizontal=True)
         is_advisor = role_sel == "Financial Advisor"
-        is_owner   = role_sel == "Platform Owner"
-        role       = "owner" if is_owner else "advisor" if is_advisor else "client"
+        is_owner   = False
+        role       = "advisor" if is_advisor else "client"
 
         with st.form("reg_form"):
             if is_advisor:

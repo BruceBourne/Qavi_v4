@@ -22,7 +22,7 @@ def _bar(label, val, max_val, color):
     return f'<div style="margin-bottom:.9rem"><div style="display:flex;justify-content:space-between;margin-bottom:.3rem"><span style="font-size:.84rem;color:#F0F4FF">{label}</span><span style="font-size:.88rem;font-weight:700;color:{color}">₹{indian_format(val)}</span></div><div style="background:#1E2535;border-radius:5px;height:12px"><div style="background:{color};width:{pct:.1f}%;height:100%;border-radius:5px"></div></div></div>'
 
 def render():
-    if not st.session_state.get("user") or st.session_state.user["role"] != "advisor":
+    if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
     user = st.session_state.user
     clients  = get_advisor_clients(user["id"])

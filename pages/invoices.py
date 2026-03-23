@@ -452,7 +452,7 @@ table.ht tr:nth-child(even) {{ background:#f8fafc; }}
 
 # ── RENDER ────────────────────────────────────────────────────────────────
 def render():
-    if not st.session_state.get("user") or st.session_state.user["role"] != "advisor":
+    if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
 
     user     = st.session_state.user

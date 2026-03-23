@@ -7,7 +7,7 @@ from utils.crypto import fmt_date, indian_format
 from datetime import date, timedelta
 
 def render():
-    if not st.session_state.get("user") or st.session_state.user["role"] != "advisor":
+    if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
 
     st.markdown('<div class="page-title">Data Management</div>', unsafe_allow_html=True)

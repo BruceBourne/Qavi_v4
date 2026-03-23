@@ -171,7 +171,7 @@ def render():
 
     # ── Portfolio selection ────────────────────────────────────────────────
     all_pfs = []
-    if role == "advisor":
+    if role in ("advisor","owner"):
         clients = get_advisor_clients(user["id"])
         if not clients: st.info("No clients yet."); return
         ac_map  = {c["id"]: c["client_name"] for c in clients}
@@ -219,7 +219,7 @@ def render():
     st.markdown("<br>", unsafe_allow_html=True)
 
     # Tab list — some tabs advisor-only
-    if role == "advisor":
+    if role in ("advisor","owner"):
         tabs = st.tabs(["  🥧 Allocation  ","  📈 Performance  ","  ⚠️ Risk  ",
                          "  📉 Rate Sensitivity  ","  🎯 Scenarios  ",
                          "  🔗 Correlation  ","  📊 VaR  ","  🔀 Cross-Portfolio  "])
@@ -710,7 +710,7 @@ def render():
     # ── CROSS-PORTFOLIO (advisor only) ────────────────────────────────────
     if t_cross:
         with t_cross:
-            if role != "advisor":
+            if role not in ("advisor","owner"):
                 st.info("Advisor only."); return
             rows = []
             for cl in get_advisor_clients(user["id"]):

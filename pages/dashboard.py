@@ -25,7 +25,7 @@ def render():
     st.markdown(f'<div class="page-sub">Your wealth overview &nbsp;&nbsp;{open_badge}</div>', unsafe_allow_html=True)
 
     # ── ADVISOR ───────────────────────────────────────────────────────────
-    if role == "advisor":
+    if role in ("advisor","owner"):
         # Single RPC call replaces all client+portfolio+holdings+price loops
         with st.spinner("Loading dashboard…"):
             rows    = rpc_advisor_dashboard(user["id"])

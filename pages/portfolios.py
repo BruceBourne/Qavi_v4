@@ -127,7 +127,7 @@ def render():
     pmap = get_all_prices_map()
 
     # ── ADVISOR ────────────────────────────────────────────────────────────
-    if role == "advisor":
+    if role in ("advisor","owner"):
         clients = get_advisor_clients(user["id"])
         if not clients:
             st.info("No clients yet.")
