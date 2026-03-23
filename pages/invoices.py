@@ -295,15 +295,23 @@ body {{
   background: #fff;
   line-height: 1.5;
 }}
-/* .page padding = @page margin so browser and print are identical */
+/* .page: A4 landscape content area — identical in browser and print */
 .page {{
-  width: 269mm;          /* 297mm - 2×14mm */
+  width: 269mm;          /* 297mm minus 2×14mm margins */
+  min-height: 175mm;     /* 210mm minus 2×14mm — landscape A4 height */
   margin: 14mm auto;
   padding: 0;
   background: #fff;
+  box-shadow: 0 2px 20px rgba(0,0,0,.12);   /* visible shadow in browser */
+}}
+/* Landscape hint for browser — rotate viewport feel */
+html {{
+  background: #e2e8f0;   /* grey outside the page — like a PDF viewer */
+  min-height: 100%;
 }}
 @media print {{
-  .page {{ width:100%; margin:0; }}
+  html  {{ background: #fff; }}
+  .page {{ width:100%; margin:0; box-shadow:none; }}
   body  {{ margin:0; }}
 }}
 
@@ -500,9 +508,27 @@ def render():
                                                inv.get("fee_value",1), inv.get("fee_frequency","annual"),
                                                inv.get("fee_type","management"), inv.get("num_meetings",0)
                                            ))
-                    b64    = base64.b64encode(html_c.encode()).decode()
-                    b2.markdown(f'<a href="data:text/html;base64,{b64}" download="{inv["invoice_number"]}.html" style="display:block;text-align:center;background:#161B27;color:#F0F4FF;padding:.42rem .9rem;border-radius:8px;border:1px solid #252D40;font-size:.84rem;text-decoration:none">📥 Download</a>', unsafe_allow_html=True)
-                    b3.markdown(f'<a href="data:text/html;base64,{b64}" target="_blank" style="display:block;text-align:center;background:#161B27;color:#F0F4FF;padding:.42rem .9rem;border-radius:8px;border:1px solid #252D40;font-size:.84rem;text-decoration:none">🔍 Preview</a>', unsafe_allow_html=True)
+                    b64 = base64.b64encode(html_c.encode()).decode()
+
+                    # Download — works in all browsers
+                    b2.markdown(
+                        f'<a href="data:text/html;base64,{b64}" '
+                        f'download="{inv["invoice_number"]}.html" '
+                        f'style="display:block;text-align:center;background:#161B27;color:#F0F4FF;'
+                        f'padding:.42rem .9rem;border-radius:8px;border:1px solid #252D40;'
+                        f'font-size:.84rem;text-decoration:none">📥 Download</a>',
+                        unsafe_allow_html=True)
+
+                    # Preview toggle — inline iframe (avoids browser data: URI block)
+                    prev_key = f"prev_{inv['id']}"
+                    if b3.button("🔍 Preview", key=prev_key, use_container_width=True):
+                        st.session_state[f"show_prev_{inv['id']}"] = \
+                            not st.session_state.get(f"show_prev_{inv['id']}", False)
+
+                    if st.session_state.get(f"show_prev_{inv['id']}", False):
+                        import streamlit.components.v1 as components
+                        st.markdown("---")
+                        components.html(html_c, height=620, scrolling=True)
 
                     if b4.button("🗑 Delete", key=f"dinv_{inv['id']}", use_container_width=True):
                         st.session_state[f"del_{inv['id']}"] = True; st.rerun()

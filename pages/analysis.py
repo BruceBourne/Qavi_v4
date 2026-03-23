@@ -265,7 +265,7 @@ def render():
         has_sectors = any(k not in ("Unknown","Other","","Unclassified")
                           for k in sector_vals)
         if has_sectors:
-            st.markdown("<br>#### By Sector")
+            st.markdown("<br>#### By Sector", unsafe_allow_html=True)
             st.markdown('<div class="stat-bar-wrap">', unsafe_allow_html=True)
             for sec, val in sorted(sector_vals.items(), key=lambda x:-x[1])[:15]:
                 st.markdown(_bar(sec, val, cur, "#A855F7"), unsafe_allow_html=True)
@@ -277,14 +277,14 @@ def render():
                 to populate sectors for your holdings.
             </div>""", unsafe_allow_html=True)
 
-        st.markdown("<br>#### By Cap / Sub-Category")
+        st.markdown("<br>#### By Cap / Sub-Category", unsafe_allow_html=True)
         st.markdown('<div class="stat-bar-wrap">', unsafe_allow_html=True)
         for sub, val in sorted(sub_vals.items(), key=lambda x:-x[1])[:15]:
             st.markdown(_bar(sub, val, cur, "#4F7EFF"), unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Holdings table with weight
-        st.markdown("<br>#### Holdings Detail")
+        st.markdown("<br>#### Holdings Detail", unsafe_allow_html=True)
         hdr = st.columns([2.5,1.5,1.2,1.5,1.5,2,1.5])
         for col,lbl in zip(hdr,["Symbol","Asset","Qty","Avg Cost","LTP","P&L","Weight"]):
             col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
@@ -338,7 +338,7 @@ def render():
                                  "#2ECC7A" if xirr_val>=0 else "#FF5A5A"), unsafe_allow_html=True)
 
         # Benchmark comparison
-        st.markdown("<br>#### Benchmark Comparison")
+        st.markdown("<br>#### Benchmark Comparison", unsafe_allow_html=True)
         bench_rows = [(i["name"], i["change_pct"]) for i in indices if i["symbol"] not in ("INDIA_VIX",)]
         bench_rows = [("📁 This Portfolio", pnl_pct)] + bench_rows[:6]
         for name, chg in bench_rows:
@@ -411,17 +411,16 @@ def render():
     # ── INTEREST RATE SENSITIVITY (advisor only) ──────────────────────────
     if t_rate:
         with t_rate:
-            st.markdown("#### Interest Rate Sensitivity")
+            st.markdown('<h4 style="margin:.3rem 0 .5rem 0;font-size:.95rem;color:#F0F4FF">Interest Rate Sensitivity</h4>', unsafe_allow_html=True)
             st.markdown("""
-            <div style="font-size:.78rem;color:#8892AA;margin-bottom:1rem;line-height:1.8">
-                Shows how this portfolio's value changes with a shift in India's 10-Year G-Sec yield.<br>
-                Uses modified duration and convexity of each asset class.<br>
+            <div style="font-size:.78rem;color:#8892AA;margin-bottom:.8rem;line-height:1.8">
+                Shows how portfolio value changes with a shift in India's 10-Year G-Sec yield.<br>
                 Formula: ΔV = −V × D × Δy + 0.5 × V × C × Δy²
             </div>""", unsafe_allow_html=True)
 
-            # Compute portfolio duration and convexity (value-weighted)
-            port_duration   = 0.0
-            port_convexity  = 0.0
+            # Portfolio duration and convexity
+            port_duration  = 0.0
+            port_convexity = 0.0
             for h in holdings:
                 p, _  = _p(h["symbol"], pmap)
                 val   = h["quantity"] * (p or h["avg_cost"])
@@ -438,9 +437,22 @@ def render():
                                      f"{port_convexity:.2f}",
                                      "Curvature of price-yield relationship"), unsafe_allow_html=True)
 
-            st.markdown("<br>#### Sensitivity Table")
-            scenarios = [("−2.0%", -0.02),("−1.0%",-0.01),("−0.5%",-0.005),
-                         ("+0.5%", 0.005),("+1.0%",0.01),("+2.0%",0.02)]
+            # Manual range controls
+            st.markdown('<h4 style="margin:.8rem 0 .3rem 0;font-size:.95rem;color:#F0F4FF">Custom Rate Range</h4>', unsafe_allow_html=True)
+            cr1, cr2 = st.columns(2)
+            rate_min = cr1.slider("Min yield change (%)", min_value=-5.0, max_value=0.0,
+                                   value=-2.0, step=0.1, key="rate_min")
+            rate_max = cr2.slider("Max yield change (%)", min_value=0.0, max_value=5.0,
+                                   value=2.0, step=0.1, key="rate_max")
+            rate_steps = st.select_slider("Number of steps",
+                                           options=[4, 6, 8, 10, 12, 16, 20],
+                                           value=6, key="rate_steps")
+
+            import numpy as np
+            dy_range  = np.linspace(rate_min/100, rate_max/100, int(rate_steps))
+            scenarios = [(f"{v*100:+.2f}%", float(v)) for v in dy_range]
+
+            st.markdown('<h4 style="margin:.8rem 0 .3rem 0;font-size:.95rem;color:#F0F4FF">Sensitivity Table</h4>', unsafe_allow_html=True)
             hdr = st.columns([2,2,2,2])
             for col,lbl in zip(hdr,["Yield Change","ΔPortfolio Value","New Portfolio Value","Impact"]):
                 col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)

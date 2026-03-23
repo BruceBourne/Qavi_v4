@@ -60,35 +60,43 @@ def _fetch_sebi_classification():
         "https://nsearchives.nseindia.com/content/equities/MCAP.csv",
         "https://nsearchives.nseindia.com/content/equities/mcap.csv",
         "https://www.nseindia.com/content/equities/MCAP.csv",
-        "https://nsearchives.nseindia.com/content/indices/mcap.csv",
     ]
     for url in mcap_urls:
         try:
             r = sess.get(url, headers={"Referer":"https://www.nseindia.com/"}, timeout=15)
             if r.status_code == 200 and len(r.content) > 1000:
-                lines = r.text.strip().split("\n")
-                for i, line in enumerate(lines[1:], 1):
+                lines      = r.text.strip().split("\n")
+                seen_syms  = set()
+                rank       = 0
+                local_caps = {}
+                for line in lines[1:]:
                     parts = [p.strip().strip('"') for p in line.split(",")]
                     sym   = parts[0].upper() if parts else ""
-                    if sym:
-                        sym_to_cap[sym] = "Large Cap" if i<=100 else "Mid Cap" if i<=250 else "Small Cap"
-                if sym_to_cap:
-                    return sym_to_cap, f"MCAP.csv ({len(sym_to_cap)} stocks)"
+                    if not sym or sym in seen_syms:
+                        continue        # skip blank and duplicate series rows
+                    seen_syms.add(sym)
+                    rank += 1           # rank by unique symbol, not raw CSV row
+                    local_caps[sym] = ("Large Cap" if rank <= 100
+                                       else "Mid Cap" if rank <= 250
+                                       else "Small Cap")
+                # Sanity: expect at least 500 classified stocks
+                if len(local_caps) >= 500:
+                    return local_caps, f"MCAP.csv — {len(local_caps)} unique symbols (Large:100, Mid:150, Small:{len(local_caps)-250})"
+                # Too few rows — file was malformed or too small, try next URL
         except Exception:
             continue
 
     # ── Source 2: NSE Index Constituent APIs ──────────────────────────────
-    # NSE exposes index constituent lists via their API
+    # Nifty 100 = Large Cap, Nifty Next 50 (101-150) + Nifty Midcap 150 = Mid Cap,
+    # Nifty Smallcap 250 = Small Cap. SEBI uses these exact index boundaries.
     index_apis = [
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20100",   100),
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20NEXT%2050", 150),
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20MIDCAP%20150", 250),
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20SMALLCAP%20250", 9999),
+        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20100",       "Large Cap"),
+        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20NEXT%2050", "Mid Cap"),
+        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20MIDCAP%20150", "Mid Cap"),
+        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20SMALLCAP%20250", "Small Cap"),
     ]
-    nifty100_syms = set()
-    nifty150_syms = set()
-    nifty_mid_syms = set()
-    for api_url, rank_threshold in index_apis:
+    api_success = 0
+    for api_url, cap_label in index_apis:
         try:
             r = sess.get(api_url, headers={"Referer":"https://www.nseindia.com/"}, timeout=10)
             if r.status_code == 200:
@@ -96,20 +104,22 @@ def _fetch_sebi_classification():
                 for item in data.get("data", []):
                     sym = item.get("symbol","").upper()
                     if not sym: continue
-                    if rank_threshold <= 100:   nifty100_syms.add(sym)
-                    elif rank_threshold <= 150: nifty150_syms.add(sym)
-                    elif rank_threshold <= 250: nifty_mid_syms.add(sym)
-                    else:
-                        if sym not in sym_to_cap:
-                            sym_to_cap[sym] = "Small Cap"
+                    # Never downgrade: Large Cap > Mid Cap > Small Cap
+                    existing = sym_to_cap.get(sym)
+                    if existing == "Large Cap":
+                        pass  # already best — keep
+                    elif existing == "Mid Cap" and cap_label == "Large Cap":
+                        sym_to_cap[sym] = "Large Cap"  # upgrade
+                    elif not existing:
+                        sym_to_cap[sym] = cap_label
+                api_success += 1
         except Exception:
             continue
 
-    for sym in nifty100_syms:  sym_to_cap[sym] = "Large Cap"
-    for sym in nifty150_syms:  sym_to_cap[sym] = "Large Cap" if sym in nifty100_syms else "Mid Cap"
-    for sym in nifty_mid_syms: sym_to_cap[sym] = "Mid Cap"
-    if sym_to_cap:
-        return sym_to_cap, f"NSE index APIs ({len(sym_to_cap)} stocks)"
+    if api_success > 0 and sym_to_cap:
+        counts = {c: sum(1 for v in sym_to_cap.values() if v==c) for c in ("Large Cap","Mid Cap","Small Cap")}
+        return sym_to_cap, (f"NSE Index APIs — L:{counts['Large Cap']} M:{counts['Mid Cap']} "
+                            f"S:{counts['Small Cap']} ({api_success}/4 APIs reached)")
 
     # ── Source 3: Hardcoded fallback — Nifty 50 + known categorisation ────
     LARGE_CAP = {
@@ -213,6 +223,81 @@ def render():
     do_sectors  = c2.checkbox("Apply known sector mapping",    value=True)
     do_yf       = c2.checkbox("Yahoo Finance sectors (slow)", value=False)
     limit       = st.number_input("Max stocks to process (0 = all)", min_value=0, value=0, step=100)
+
+    # ── MANUAL CAP UPLOAD ─────────────────────────────────────────────────
+    with st.expander("📂 Manual Cap Classification Upload (if automatic fetch fails)"):
+        st.markdown("""
+        <div style="font-size:.79rem;color:#C8D0E0;line-height:1.9">
+            Upload a CSV with two columns: <code>symbol</code> and <code>cap</code>
+            (values: <code>Large Cap</code>, <code>Mid Cap</code>, <code>Small Cap</code>).<br>
+            Download MCAP.csv from
+            <a href="https://www.nseindia.com/market-data/securities-available-for-trading"
+               target="_blank" style="color:#4F7EFF">NSE Securities page</a>
+            or use any ranking list with symbol + rank columns.
+        </div>
+        """, unsafe_allow_html=True)
+        cap_file = st.file_uploader("Upload cap CSV", type=["csv"], key="cap_upload")
+        if cap_file:
+            try:
+                import pandas as pd
+                cap_df = pd.read_csv(cap_file)
+                cap_df.columns = [c.strip().lower() for c in cap_df.columns]
+
+                # Accept symbol+cap OR symbol+rank columns
+                sym_col = next((c for c in cap_df.columns if c in ("symbol","ticker","sym")), None)
+                cap_col = next((c for c in cap_df.columns if c in ("cap","category","sub_class","classification")), None)
+                rank_col= next((c for c in cap_df.columns if c in ("rank","sr","serial","mcap_rank","no")), None)
+
+                if sym_col and (cap_col or rank_col):
+                    manual_caps = {}
+                    seen = set()
+                    for i, row in cap_df.iterrows():
+                        sym = str(row[sym_col]).strip().upper()
+                        if not sym or sym in seen: continue
+                        seen.add(sym)
+                        if cap_col:
+                            val = str(row[cap_col]).strip()
+                            if val in ("Large Cap","Mid Cap","Small Cap"):
+                                manual_caps[sym] = val
+                        elif rank_col:
+                            try:
+                                rank = int(float(str(row[rank_col])))
+                                manual_caps[sym] = ("Large Cap" if rank<=100
+                                                    else "Mid Cap" if rank<=250
+                                                    else "Small Cap")
+                            except ValueError:
+                                pass
+
+                    if manual_caps:
+                        counts = {c: sum(1 for v in manual_caps.values() if v==c)
+                                  for c in ("Large Cap","Mid Cap","Small Cap")}
+                        st.success(f"✅ {len(manual_caps)} stocks parsed — "
+                                   f"Large: {counts['Large Cap']}, "
+                                   f"Mid: {counts['Mid Cap']}, "
+                                   f"Small: {counts['Small Cap']}")
+                        if st.button("Apply this cap data to database", use_container_width=True,
+                                     key="apply_manual_caps"):
+                            ok = err = 0
+                            prog_m = st.progress(0.0)
+                            items  = list(manual_caps.items())
+                            for i, (sym, cap) in enumerate(items):
+                                try:
+                                    sb().table("assets").update({"sub_class":cap}).eq("symbol",sym).execute()
+                                    ok += 1
+                                except Exception:
+                                    err += 1
+                                if (i+1) % 20 == 0:
+                                    prog_m.progress((i+1)/len(items))
+                            prog_m.progress(1.0)
+                            clear_market_cache()
+                            st.success(f"Updated {ok} stocks. {f'{err} errors.' if err else ''}")
+                    else:
+                        st.warning("No valid cap values found. Ensure 'cap' column has 'Large Cap'/'Mid Cap'/'Small Cap'.")
+                else:
+                    st.error("Need columns: 'symbol' + ('cap' or 'rank'). "
+                             f"Found: {list(cap_df.columns)}")
+            except Exception as e:
+                st.error(f"File error: {e}")
 
     if not st.button("🚀 Run Enrichment", use_container_width=True):
         return
