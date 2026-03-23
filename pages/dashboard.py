@@ -51,6 +51,8 @@ def render():
         if b3.button("📊 Analysis",  use_container_width=True): navigate("analysis")
         if b4.button("🗓 Meetings",  use_container_width=True): navigate("meetings")
         if b5.button("🧾 Invoices",  use_container_width=True): navigate("invoices")
+        if role == "owner":
+            if st.button("👑 Owner Dashboard", use_container_width=True): navigate("owner")
 
         st.markdown("<br>", unsafe_allow_html=True)
         if rows:
@@ -89,10 +91,11 @@ def render():
         m4.metric("Portfolios",   len(rows))
 
         st.markdown("<br>", unsafe_allow_html=True)
-        b1, b2, b3 = st.columns(3)
+        b1, b2, b3, b4 = st.columns(4)
         if b1.button("💼 My Portfolios", use_container_width=True): navigate("portfolios")
         if b2.button("📊 Markets",       use_container_width=True): navigate("market_equities")
         if b3.button("🗓 Meetings",      use_container_width=True): navigate("meetings")
+        if b4.button("💬 Feedback",      use_container_width=True): navigate("feedback")
 
         st.markdown("<br>", unsafe_allow_html=True)
         if rows:

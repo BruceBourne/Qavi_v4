@@ -87,13 +87,13 @@ def _fetch_sebi_classification():
             continue
 
     # ── Source 2: NSE Index Constituent APIs ──────────────────────────────
-    # Nifty 100 = Large Cap, Nifty Next 50 (101-150) + Nifty Midcap 150 = Mid Cap,
-    # Nifty Smallcap 250 = Small Cap. SEBI uses these exact index boundaries.
+    # SEBI rules: top 100 by market cap = Large Cap, 101-250 = Mid Cap, 251+ = Small Cap.
+    # We fetch Nifty 100 (Large), Nifty Next 50 (101-150), Nifty Midcap 150 (101-250).
+    # Everything NOT in these indices = Small Cap by elimination.
     index_apis = [
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20100",       "Large Cap"),
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20NEXT%2050", "Mid Cap"),
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20MIDCAP%20150", "Mid Cap"),
-        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20SMALLCAP%20250", "Small Cap"),
+        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20100",        "Large Cap"),
+        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20NEXT%2050",  "Mid Cap"),
+        ("https://www.nseindia.com/api/equity-stockIndices?index=NIFTY%20MIDCAP%20150","Mid Cap"),
     ]
     api_success = 0
     for api_url, cap_label in index_apis:
@@ -104,22 +104,23 @@ def _fetch_sebi_classification():
                 for item in data.get("data", []):
                     sym = item.get("symbol","").upper()
                     if not sym: continue
-                    # Never downgrade: Large Cap > Mid Cap > Small Cap
                     existing = sym_to_cap.get(sym)
-                    if existing == "Large Cap":
-                        pass  # already best — keep
-                    elif existing == "Mid Cap" and cap_label == "Large Cap":
-                        sym_to_cap[sym] = "Large Cap"  # upgrade
-                    elif not existing:
+                    # Priority: Large > Mid > Small — never downgrade
+                    if existing != "Large Cap":
                         sym_to_cap[sym] = cap_label
                 api_success += 1
         except Exception:
             continue
 
     if api_success > 0 and sym_to_cap:
-        counts = {c: sum(1 for v in sym_to_cap.values() if v==c) for c in ("Large Cap","Mid Cap","Small Cap")}
-        return sym_to_cap, (f"NSE Index APIs — L:{counts['Large Cap']} M:{counts['Mid Cap']} "
-                            f"S:{counts['Small Cap']} ({api_success}/4 APIs reached)")
+        # All stocks in DB that are NOT in Large/Mid → Small Cap
+        # This is done during enrichment apply step (see below)
+        counts = {c: sum(1 for v in sym_to_cap.values() if v==c)
+                  for c in ("Large Cap","Mid Cap")}
+        total_classified = sum(counts.values())
+        return (sym_to_cap,
+                f"NSE Index APIs — Large:≤100, Mid:101-250, all others→Small Cap "
+                f"({api_success}/3 APIs, {total_classified} explicitly classified)")
 
     # ── Source 3: Hardcoded fallback — Nifty 50 + known categorisation ────
     LARGE_CAP = {
@@ -360,10 +361,13 @@ def render():
 
         if do_caps:
             new_cap = sym_to_cap.get(sym)
-            # Try ISIN lookup if symbol not found
+            # Try ISIN lookup as fallback
             if not new_cap:
-                isin = asset.get("isin") or nse_list.get(sym, {}).get("isin","")
+                isin    = asset.get("isin") or nse_list.get(sym, {}).get("isin","")
                 new_cap = isin_to_cap.get(isin)
+            # If still not found AND we had API success → this stock is Small Cap by elimination
+            if not new_cap and sym_to_cap:
+                new_cap = "Small Cap"
             if new_cap and asset.get("sub_class","") in ("","Unclassified","Unknown",None):
                 upd["sub_class"] = new_cap
                 updated_caps += 1

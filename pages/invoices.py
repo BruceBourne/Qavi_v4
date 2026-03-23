@@ -492,7 +492,7 @@ def render():
                     c2.markdown(f"**Fee Type:** {FEE_TYPES.get(inv['fee_type'],'—')}<br>**Amount:** ₹{indian_format(inv['amount'])}<br>**Status:** <span style='color:{sc};font-weight:600'>{inv['status'].upper()}</span>", unsafe_allow_html=True)
                     c3.markdown(f"**Portfolio Value:** ₹{indian_format(inv.get('portfolio_value',0))}<br>**Meetings:** {inv.get('num_meetings',0)}<br>**Period:** {fmt_date(inv.get('period_from',''))} – {fmt_date(inv.get('period_to',''))}", unsafe_allow_html=True)
 
-                    b1,b2,b3,b4 = st.columns(4)
+                    b1,b2,b3,b4,b5 = st.columns(5)
                     if inv["status"]=="unpaid":
                         if b1.button("✅ Mark Paid",  key=f"mp_{inv['id']}", use_container_width=True):
                             update_invoice_status(inv["id"],"paid"); st.rerun()
@@ -510,7 +510,7 @@ def render():
                                            ))
                     b64 = base64.b64encode(html_c.encode()).decode()
 
-                    # Download — works in all browsers
+                    # Download
                     b2.markdown(
                         f'<a href="data:text/html;base64,{b64}" '
                         f'download="{inv["invoice_number"]}.html" '
@@ -519,18 +519,61 @@ def render():
                         f'font-size:.84rem;text-decoration:none">📥 Download</a>',
                         unsafe_allow_html=True)
 
-                    # Preview toggle — inline iframe (avoids browser data: URI block)
-                    prev_key = f"prev_{inv['id']}"
-                    if b3.button("🔍 Preview", key=prev_key, use_container_width=True):
+                    # Preview
+                    if b3.button("🔍 Preview", key=f"prev_{inv['id']}", use_container_width=True):
                         st.session_state[f"show_prev_{inv['id']}"] = \
                             not st.session_state.get(f"show_prev_{inv['id']}", False)
-
                     if st.session_state.get(f"show_prev_{inv['id']}", False):
                         import streamlit.components.v1 as components
                         st.markdown("---")
                         components.html(html_c, height=620, scrolling=True)
 
-                    if b4.button("🗑 Delete", key=f"dinv_{inv['id']}", use_container_width=True):
+                    # Email invoice to client
+                    if b4.button("📧 Email", key=f"em_{inv['id']}", use_container_width=True):
+                        st.session_state[f"show_email_{inv['id']}"] = \
+                            not st.session_state.get(f"show_email_{inv['id']}", False)
+                    if st.session_state.get(f"show_email_{inv['id']}", False):
+                        with st.form(f"email_form_{inv['id']}"):
+                            client_email = client.get("client_email","")
+                            to_email = st.text_input("Send to email",
+                                                     value=client_email,
+                                                     key=f"to_{inv['id']}")
+                            to_name  = st.text_input("Recipient name",
+                                                     value=title_case(client.get("client_name","")),
+                                                     key=f"tn_{inv['id']}")
+                            if st.form_submit_button("📤 Send Invoice", use_container_width=True):
+                                if not to_email or "@" not in to_email:
+                                    st.error("Valid email required.")
+                                else:
+                                    from utils.email_utils import send_invoice_email
+                                    adv_name = title_case(advisor.get("full_name","") or
+                                                           advisor.get("username","Advisor"))
+                                    ok, msg = send_invoice_email(
+                                        to_email=to_email.strip(),
+                                        to_name=to_name.strip(),
+                                        advisor_name=adv_name,
+                                        invoice_number=inv["invoice_number"],
+                                        amount=inv["amount"],
+                                        due_date=fmt_date(inv["due_date"]),
+                                        html_content=html_c,
+                                    )
+                                    if ok:
+                                        # Log the send
+                                        try:
+                                            sb().table("invoice_emails").insert({
+                                                "invoice_id":      inv["id"],
+                                                "invoice_number":  inv["invoice_number"],
+                                                "recipient_email": to_email.strip(),
+                                                "status": "sent",
+                                            }).execute()
+                                        except Exception:
+                                            pass
+                                        st.success(f"✅ {msg}")
+                                        st.session_state.pop(f"show_email_{inv['id']}", None)
+                                    else:
+                                        st.error(msg)
+
+                    if b5.button("🗑 Delete", key=f"dinv_{inv['id']}", use_container_width=True):
                         st.session_state[f"del_{inv['id']}"] = True; st.rerun()
                     if st.session_state.get(f"del_{inv['id']}"):
                         st.error("Delete this invoice permanently?")
