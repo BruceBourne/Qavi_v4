@@ -151,13 +151,15 @@ def render():
                     update_password(user["id"], hash_password(new_pw))
                     st.success("Password updated successfully.")
 
-    # Disclaimer shown on profile page
+    # Full disclaimer on profile page
     st.markdown("""
-    <div style="margin-top:2.5rem;padding:1rem 1.2rem;background:#0D1117;
-        border-top:1px solid #1A2030;border-radius:8px;font-size:.71rem;color:#4E5A70;line-height:2">
-        <b style="color:#5A6880">Platform Disclaimer</b> &nbsp;·&nbsp;
-        Qavi is not a SEBI registered investment advisor and does not provide investment advice,
-        recommendations or execution services. All analytics are for informational purposes only.
+    <div style="margin-top:2.5rem;padding:1rem 0;border-top:1px solid #1A2030;
+        font-size:.74rem;color:#4E5A70;line-height:1.9">
+        Qavi is a portfolio analytics and intelligence platform designed to help users
+        understand their investments across asset classes. We do not provide investment advice,
+        recommendations or execution services, and are not a registered investment advisor with
+        the Securities and Exchange Board of India (SEBI). All insights are informational in
+        nature and should not be construed as financial advice.
     </div>
     """, unsafe_allow_html=True)
 

@@ -114,3 +114,15 @@ def render():
                 st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
         elif not rows:
             st.info("No portfolios yet. Your advisor will share portfolios with you, or create a private one from the Portfolios page.")
+
+    # Full disclaimer on dashboard (user's home page after login)
+    st.markdown("""
+    <div style="margin-top:2.5rem;padding:1rem 0;border-top:1px solid #1A2030;
+        font-size:.74rem;color:#4E5A70;line-height:1.9">
+        Qavi is a portfolio analytics and intelligence platform designed to help users
+        understand their investments across asset classes. We do not provide investment advice,
+        recommendations or execution services, and are not a registered investment advisor with
+        the Securities and Exchange Board of India (SEBI). All insights are informational in
+        nature and should not be construed as financial advice.
+    </div>
+    """, unsafe_allow_html=True)

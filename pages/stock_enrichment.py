@@ -410,10 +410,13 @@ def render():
             if not new_cap:
                 isin    = asset.get("isin") or nse_list.get(sym, {}).get("isin","")
                 new_cap = isin_to_cap.get(isin)
-            # If still not found AND we had API success → this stock is Small Cap by elimination
+            # Any stock not in Large/Mid lists → Small Cap by elimination
+            # This corrects previously wrong classifications too
             if not new_cap and sym_to_cap:
                 new_cap = "Small Cap"
-            if new_cap and asset.get("sub_class","") in ("","Unclassified","Unknown",None):
+            # Always apply — don't skip stocks that already have a value
+            # because previous runs may have set them incorrectly
+            if new_cap and new_cap != asset.get("sub_class",""):
                 upd["sub_class"] = new_cap
                 updated_caps += 1
 

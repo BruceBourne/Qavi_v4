@@ -98,17 +98,16 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    # Disclaimer at bottom of home page
+    # Full SEBI disclaimer at bottom of home/landing page
     st.markdown("""
     <div style="margin-top:3rem;padding:1.2rem 1.5rem;background:#0D1117;
-        border-top:1px solid #1A2030;border-radius:0 0 12px 12px">
-        <div style="font-size:.72rem;color:#4E5A70;line-height:2">
-            <b style="color:#5A6880">Disclaimer</b> &nbsp;·&nbsp;
+        border-top:1px solid #1A2030">
+        <div style="font-size:.75rem;color:#4E5A70;line-height:2">
             Qavi is a portfolio analytics and intelligence platform designed to help users
-            understand their investments across asset classes. Qavi does not provide investment
-            advice, recommendations or execution services, and is not a registered investment
-            advisor with SEBI. All analytics, risk metrics and scenario models are for
-            informational purposes only. Past performance is not indicative of future results.
+            understand their investments across asset classes. We do not provide investment
+            advice, recommendations or execution services, and are not a registered investment
+            advisor with the Securities and Exchange Board of India (SEBI). All insights are
+            informational in nature and should not be construed as financial advice.
         </div>
     </div>
     """, unsafe_allow_html=True)
