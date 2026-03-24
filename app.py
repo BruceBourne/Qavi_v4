@@ -108,16 +108,25 @@ PAGES = {
 page = st.session_state.get("page", "home")
 PAGES.get(page, home).render()
 
-# ── FOOTER — minimal one-liner on every page ─────────────────────────────
+# ── FOOTER — varies by page ───────────────────────────────────────────────
 current_page = st.session_state.get("page","home")
-if current_page not in ("home","login","register"):
+
+# No footer on login/register/home (home has its own full disclaimer)
+if current_page in ("login","register","reset_password","home"):
+    pass
+
+# Dashboard and profile get full disclaimer (handled inside those pages)
+elif current_page in ("dashboard","profile"):
+    pass  # full disclaimer injected by the page itself
+
+else:
+    # All other pages — short two-liner, no SEBI mention
     st.markdown("""
-    <div style="margin-top:2.5rem;padding:.6rem 0;border-top:1px solid #1A2030;
+    <div style="margin-top:2.5rem;padding:.5rem 0;border-top:1px solid #1A2030;
         display:flex;justify-content:space-between;align-items:center;
-        font-size:.68rem;color:#3A4560">
-        <span>◈ Qavi &nbsp;·&nbsp; Portfolio intelligence platform
-        &nbsp;·&nbsp; Not a SEBI registered advisor &nbsp;·&nbsp;
-        Analytics for informational purposes only</span>
+        font-size:.66rem;color:#3A4560">
+        <span>◈ Qavi &nbsp;·&nbsp; Portfolio intelligence platform &nbsp;·&nbsp;
+        All insights are informational in nature and should not be construed as financial advice.</span>
         <span>© 2025 Qavi</span>
     </div>
     """, unsafe_allow_html=True)
