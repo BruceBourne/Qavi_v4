@@ -48,6 +48,24 @@ def inject_styles():
     div[data-testid="metric-container"] label{color:var(--text2)!important;font-size:.75rem!important;}
     div[data-testid="metric-container"] [data-testid="metric-value"]{color:var(--text)!important;font-weight:600!important;}
     .stTab [data-baseweb="tab"]{font-family:'Inter',sans-serif!important;font-weight:500!important;color:var(--text2)!important;font-size:.84rem!important;}
+
+    /* ── GLOBAL TABLE / ROW STYLES ── */
+    /* Streamlit native dataframes */
+    .stDataFrame{font-size:.88rem!important;}
+    .stDataFrame table{font-size:.88rem!important;}
+    .stDataFrame th{font-size:.78rem!important;font-weight:600!important;
+        color:var(--text2)!important;text-align:left!important;
+        border-bottom:1px solid var(--border)!important;}
+    .stDataFrame td{font-size:.86rem!important;color:var(--text)!important;
+        vertical-align:middle!important;padding:.45rem .6rem!important;}
+    /* Custom markdown table rows — header labels */
+    .tbl-hdr{font-size:.78rem!important;color:var(--text2);font-weight:600;
+        padding-bottom:.3rem;}
+    /* Custom row data — increase from .82-.84rem to .88rem */
+    .tbl-row{font-size:.88rem!important;color:var(--text);line-height:1.6;}
+    .tbl-row-sub{font-size:.76rem!important;color:var(--text2);}
+    /* Ensure custom columns align properly */
+    [data-testid="column"]{display:flex;align-items:center;}
     .stTab [aria-selected="true"]{color:var(--accent)!important;}
     .stTab [data-baseweb="tab-border"]{background:var(--accent)!important;}
     .stExpander{border:1px solid var(--border)!important;border-radius:var(--radius)!important;background:var(--surface)!important;}

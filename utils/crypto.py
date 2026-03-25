@@ -101,18 +101,23 @@ def title_case(value: str) -> str:
 # ── INDIAN NUMBER FORMAT ──────────────────────────────────────────────────
 
 def indian_format(amount: float) -> str:
-    """Format number in Indian comma system: 1,00,000 not 100,000"""
+    """Format number in Indian comma system: 1,00,000 not 100,000. No .00 for whole numbers."""
     if amount < 0:
         return "−" + indian_format(-amount)
     amount = round(amount, 2)
-    s = f"{amount:.2f}"
-    integer_part, decimal_part = s.split(".")
-    # Apply Indian comma system
-    n = integer_part
+    # Show decimals only if non-zero
+    if amount == int(amount):
+        s = str(int(amount))
+        decimal_part = None
+    else:
+        s = f"{amount:.2f}"
+        integer_part, decimal_part = s.split(".")
+        s = integer_part
+    n = s
     if len(n) <= 3:
-        return f"{n}.{decimal_part}"
+        return f"{n}" if decimal_part is None else f"{n}.{decimal_part}"
     last3 = n[-3:]
-    rest = n[:-3]
+    rest  = n[:-3]
     groups = []
     while len(rest) > 2:
         groups.append(rest[-2:])
@@ -121,7 +126,7 @@ def indian_format(amount: float) -> str:
         groups.append(rest)
     groups.reverse()
     formatted = ",".join(groups) + "," + last3
-    return f"{formatted}.{decimal_part}"
+    return f"{formatted}" if decimal_part is None else f"{formatted}.{decimal_part}"
 
 def inr(amount: float, show_sign: bool = False) -> str:
     """Return formatted Indian rupee string."""
