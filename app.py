@@ -69,8 +69,11 @@ if user:
         if nc[7].button("Profile",  use_container_width=True, key="n_pr"):  navigate("profile")
 
     if nc[8].button("⏏", use_container_width=True, key="n_out", help="Sign Out"):
+        from utils.session import clear_credentials_js
+        clear_credentials_js()
         for k in ["user","page_history","selected_ac_id","selected_pf_id",
-                  "selected_symbol","_upload_auth","_inv_calc"]:
+                  "selected_symbol","_upload_auth","_inv_calc",
+                  "_saved_email","_saved_password","_last_active"]:
             st.session_state[k] = None if k != "page_history" else []
         navigate("home")
 
