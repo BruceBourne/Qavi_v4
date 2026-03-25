@@ -1,14 +1,13 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate, back_button
+from utils.session import navigate
 from utils.db import get_mutual_funds
 from utils.crypto import indian_format
 from collections import defaultdict
 
 def render():
     st.markdown('<div class="page-title">Mutual Funds</div>', unsafe_allow_html=True)
-    back_button(fallback="market_equities", key="top")
     st.markdown('<div class="page-sub">NAVs updated daily from mfapi.in</div>', unsafe_allow_html=True)
 
     b1,b2,b3,b4,b5 = st.columns(5)
@@ -51,4 +50,3 @@ def render():
                     if hc[5].button("→", key=f"mfd_{m['symbol']}"):
                         st.session_state.selected_symbol = m["symbol"]; navigate("asset_detail")
                     st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
-    back_button(fallback="market_equities", label="← Back", key="bot")

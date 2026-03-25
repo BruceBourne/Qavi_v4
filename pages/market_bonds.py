@@ -1,14 +1,13 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate, back_button
+from utils.session import navigate
 from utils.db import get_fixed_income
 from utils.crypto import indian_format, fmt_date
 from collections import defaultdict
 
 def render():
     st.markdown('<div class="page-title">Bonds & Fixed Income</div>', unsafe_allow_html=True)
-    back_button(fallback="market_equities", key="top")
     st.markdown('<div class="page-sub">Government securities, PSU bonds, NCDs, and savings schemes</div>', unsafe_allow_html=True)
 
     b1,b2,b3,b4,b5 = st.columns(5)
@@ -45,4 +44,3 @@ def render():
                 col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
             for b in items: _row(b)
-    back_button(fallback="market_equities", label="← Back", key="bot")

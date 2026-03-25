@@ -30,7 +30,6 @@ def _returns_table(history, current_price):
     return result
 
 def render():
-    back_button(fallback="market_equities", key="top")
     symbol = st.session_state.get("selected_symbol")
     if not symbol:
         st.warning("No asset selected.")
@@ -202,4 +201,3 @@ def render():
             st.markdown(f'<div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid #1E2535"><span style="font-size:.83rem;color:#8892AA">{label}</span><span style="font-size:.88rem;color:{color};font-weight:600">{val}</span></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         st.caption("Sharpe ratio uses 7% annual risk-free rate. Beta calculation requires benchmark history — coming soon.")
-    back_button(fallback="market_equities", label="← Back", key="bot")

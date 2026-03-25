@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.db import get_user_by_email, set_reset_token
+from utils.db import get_user_by_email, set_reset_token, record_login
 from utils.crypto import verify_password, generate_reset_token, verify_advisor_key, hash_advisor_key
 from utils.session import navigate, save_credentials_js, clear_credentials_js
 from datetime import datetime, timedelta
@@ -71,6 +71,7 @@ def render():
                         if user and verify_password(password, user["password_hash"]):
                             st.session_state.user         = user
                             st.session_state.page_history = []
+                            record_login(user["id"])
 
                             if remember:
                                 # Persist in session_state for same-tab autofill

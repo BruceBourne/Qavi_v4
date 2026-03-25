@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate, back_button
+from utils.session import navigate
 from utils.db import update_user_profile, get_user_by_id, decrypt_user, upgrade_to_owner, delete_user_account
 from utils.crypto import fmt_date, title_case
 import hashlib
@@ -13,7 +13,6 @@ def _owner_key_hash():
 def render():
     if not st.session_state.get("user"):
         navigate("login"); return
-    back_button(fallback="dashboard", key="top")
     user = decrypt_user(st.session_state.user)
     role = user["role"]
 
@@ -163,4 +162,3 @@ def render():
         nature and should not be construed as financial advice.
     </div>
     """, unsafe_allow_html=True)
-    back_button(fallback="dashboard", label="← Back", key="bot")

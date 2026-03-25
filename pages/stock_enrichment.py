@@ -237,6 +237,7 @@ def _fetch_sector_yf(symbol):
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+
     back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Stock Enrichment</div>', unsafe_allow_html=True)
@@ -582,3 +583,4 @@ def _flush(batch):
             err += 1
     return ok, err
     back_button(fallback="profile", label="← Back", key="bot")
+

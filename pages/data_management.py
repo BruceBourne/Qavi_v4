@@ -9,6 +9,7 @@ from datetime import date, timedelta
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+
     back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Data Management</div>', unsafe_allow_html=True)
@@ -152,3 +153,4 @@ def render():
             else:
                 st.info("No price rows found in this date range.")
     back_button(fallback="profile", label="← Back", key="bot")
+

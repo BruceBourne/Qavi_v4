@@ -107,6 +107,7 @@ def _upsert_batched(rows, table, conflict, prog_start, prog_end, prog_bar, label
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+
     back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Market Data Upload</div>', unsafe_allow_html=True)
@@ -561,3 +562,4 @@ def render():
 
     st.markdown("---")
     back_button(fallback="profile", label="← Back", key="bot")
+

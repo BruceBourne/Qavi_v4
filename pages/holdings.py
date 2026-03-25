@@ -80,6 +80,7 @@ def _collect_portfolios(user):
 def render():
     if not st.session_state.get("user"):
         navigate("login"); return
+
     back_button(fallback="portfolios", key="top")
     user = st.session_state.user
 
@@ -396,4 +397,3 @@ def render():
                 st.markdown(f"**Status:** <span style='color:{sc}'>{pa['status'].upper()}</span><br>"
                             f"**Submitted:** {fmt_date(str(pa.get('submitted_at',''))[:10])}",
                             unsafe_allow_html=True)
-    back_button(fallback="portfolios", label="← Back", key="bot")

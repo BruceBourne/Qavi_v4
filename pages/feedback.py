@@ -33,7 +33,6 @@ def render():
     user = st.session_state.get("user")
 
     st.markdown('<div class="page-title">Feedback & Support</div>', unsafe_allow_html=True)
-    back_button(fallback="profile", key="top")
     st.markdown('<div class="page-sub">Report issues, bugs, or share suggestions</div>',
                 unsafe_allow_html=True)
 
@@ -100,4 +99,3 @@ def render():
                 st.error(f"Could not submit feedback: {e}")
 
     st.markdown("")
-    back_button(fallback="profile", label="← Back", key="bot")

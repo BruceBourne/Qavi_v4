@@ -24,6 +24,7 @@ def _bar(label, val, max_val, color):
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+
     back_button(fallback="profile", key="top")
     user = st.session_state.user
     clients  = get_advisor_clients(user["id"])
@@ -152,4 +153,3 @@ def render():
             for name,v in sorted(by_client.items(), key=lambda x:-x[1]):
                 st.markdown(_bar(name, v, mv, "#4F7EFF"), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
-    back_button(fallback="profile", label="← Back", key="bot")
