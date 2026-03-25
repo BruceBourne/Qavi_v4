@@ -537,6 +537,16 @@ def upgrade_to_owner(uid: str):
     """Elevate an existing account to owner role."""
     sb().table("users").update({"role": "owner"}).eq("id", uid).execute()
 
+def record_login(uid: str):
+    """Record the current UTC timestamp as last_login for activity tracking."""
+    from datetime import datetime, timezone
+    try:
+        sb().table("users").update({
+            "last_login": datetime.now(timezone.utc).isoformat()
+        }).eq("id", uid).execute()
+    except Exception:
+        pass   # non-critical — never block login
+
 def delete_user_account(uid: str):
     """
     Delete a user account and all associated data.
