@@ -140,8 +140,8 @@ def _bar(label, val, total, color="#4F7EFF", show_val=True):
     val_str = f"₹{indian_format(val)} · {pct:.1f}%" if show_val else f"{pct:.1f}%"
     return f"""<div class="stat-bar-row">
       <div class="stat-bar-label">
-        <span style="font-size:.82rem;color:#F0F4FF">{label}</span>
-        <span style="font-size:.82rem;color:{color};font-weight:600">{val_str}</span>
+        <span style="font-size:.88rem;color:#F0F4FF">{label}</span>
+        <span style="font-size:.88rem;color:{color};font-weight:600">{val_str}</span>
       </div>
       <div class="stat-bar-bg">
         <div class="stat-bar-fill" style="background:{color};width:{pct:.1f}%"></div>
@@ -153,7 +153,7 @@ def _metric_card(label, value, sub=None, color="#F0F4FF"):
             f'padding:.85rem 1.1rem;margin-bottom:.6rem">'
             f'<div style="font-size:.62rem;color:#8892AA;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.3rem">{label}</div>'
             f'<div style="font-size:1.25rem;font-weight:700;color:{color}">{value}</div>'
-            f'{"<div style=font-size:.72rem;color:#8892AA;margin-top:.2rem>" + sub + "</div>" if sub else ""}'
+            f'{"<div style=font-size:.76rem;color:#8892AA;margin-top:.2rem>" + sub + "</div>" if sub else ""}'
             f'</div>')
 
 # ── MAIN RENDER ───────────────────────────────────────────────────────────
@@ -265,7 +265,7 @@ def render():
         has_sectors = any(k not in ("Unknown","Other","","Unclassified")
                           for k in sector_vals)
         if has_sectors:
-            st.markdown("<br>#### By Sector", unsafe_allow_html=True)
+            st.markdown(""); st.markdown("#### By Sector")
             st.markdown('<div class="stat-bar-wrap">', unsafe_allow_html=True)
             for sec, val in sorted(sector_vals.items(), key=lambda x:-x[1])[:15]:
                 st.markdown(_bar(sec, val, cur, "#A855F7"), unsafe_allow_html=True)
@@ -277,17 +277,17 @@ def render():
                 to populate sectors for your holdings.
             </div>""", unsafe_allow_html=True)
 
-        st.markdown("<br>#### By Cap / Sub-Category", unsafe_allow_html=True)
+        st.markdown(""); st.markdown("#### By Cap / Sub-Category")
         st.markdown('<div class="stat-bar-wrap">', unsafe_allow_html=True)
         for sub, val in sorted(sub_vals.items(), key=lambda x:-x[1])[:15]:
             st.markdown(_bar(sub, val, cur, "#4F7EFF"), unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
 
         # Holdings table with weight
-        st.markdown("<br>#### Holdings Detail", unsafe_allow_html=True)
+        st.markdown(""); st.markdown("#### Holdings Detail")
         hdr = st.columns([2.5,1.5,1.2,1.5,1.5,2,1.5])
         for col,lbl in zip(hdr,["Symbol","Asset","Qty","Avg Cost","LTP","P&L","Weight"]):
-            col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
+            col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
         st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
         for h in sorted(holdings, key=lambda x:-(_p(x["symbol"],pmap)[0]*x["quantity"])):
             p, chg = _p(h["symbol"], pmap)
@@ -298,13 +298,13 @@ def render():
             pc     = "#2ECC7A" if hpnl>=0 else "#FF5A5A"
             cc     = "#2ECC7A" if chg>=0  else "#FF5A5A"
             hc = st.columns([2.5,1.5,1.2,1.5,1.5,2,1.5])
-            hc[0].markdown(f"<div style='font-weight:600;font-size:.87rem'>{h['symbol']}</div><div style='font-size:.7rem;color:#8892AA'>{h.get('sub_class','')}</div>", unsafe_allow_html=True)
+            hc[0].markdown(f"<div style='font-weight:600;font-size:.9rem'>{h['symbol']}</div><div style='font-size:.7rem;color:#8892AA'>{h.get('sub_class','')}</div>", unsafe_allow_html=True)
             hc[1].markdown(f"<span class='badge badge-{h['asset_class'][:2].lower()}'>{h['asset_class'][:3]}</span>", unsafe_allow_html=True)
-            hc[2].markdown(f"<div style='font-size:.83rem'>{h['quantity']:g}</div>", unsafe_allow_html=True)
-            hc[3].markdown(f"<div style='font-size:.83rem'>₹{indian_format(h['avg_cost'])}</div>", unsafe_allow_html=True)
-            hc[4].markdown(f"<div style='font-size:.83rem'>₹{indian_format(p)}</div><div style='font-size:.7rem;color:{cc}'>{chg:+.2f}%</div>", unsafe_allow_html=True)
-            hc[5].markdown(f"<div style='color:{pc};font-weight:600;font-size:.83rem'>₹{indian_format(abs(hpnl))} ({hpct:+.1f}%)</div>", unsafe_allow_html=True)
-            hc[6].markdown(f"<div style='font-size:.83rem;color:#8892AA'>{weight:.1f}%</div>", unsafe_allow_html=True)
+            hc[2].markdown(f"<div style='font-size:.88rem'>{h['quantity']:g}</div>", unsafe_allow_html=True)
+            hc[3].markdown(f"<div style='font-size:.88rem'>₹{indian_format(h['avg_cost'])}</div>", unsafe_allow_html=True)
+            hc[4].markdown(f"<div style='font-size:.88rem'>₹{indian_format(p)}</div><div style='font-size:.7rem;color:{cc}'>{chg:+.2f}%</div>", unsafe_allow_html=True)
+            hc[5].markdown(f"<div style='color:{pc};font-weight:600;font-size:.88rem'>₹{indian_format(abs(hpnl))} ({hpct:+.1f}%)</div>", unsafe_allow_html=True)
+            hc[6].markdown(f"<div style='font-size:.88rem;color:#8892AA'>{weight:.1f}%</div>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
 
     # ── PERFORMANCE ───────────────────────────────────────────────────────
@@ -337,22 +337,116 @@ def render():
                                  "Internal rate of return",
                                  "#2ECC7A" if xirr_val>=0 else "#FF5A5A"), unsafe_allow_html=True)
 
-        # Benchmark comparison
-        st.markdown("<br>#### Benchmark Comparison", unsafe_allow_html=True)
-        bench_rows = [(i["name"], i["change_pct"]) for i in indices if i["symbol"] not in ("INDIA_VIX",)]
-        bench_rows = [("📁 This Portfolio", pnl_pct)] + bench_rows[:6]
-        for name, chg in bench_rows:
+        # ── Flexible Benchmark Comparison ────────────────────────────────
+        st.markdown(""); st.markdown("#### Benchmark Comparison")
+
+        # Default benchmark options per asset class mix
+        BENCHMARK_OPTIONS = {
+            "NIFTY50":       "Nifty 50",
+            "NIFTY100":      "Nifty 100",
+            "NIFTY200":      "Nifty 200",
+            "NIFTY500":      "Nifty 500",
+            "SENSEX":        "BSE Sensex",
+            "NIFTYMIDCAP150":"Nifty Midcap 150",
+            "NIFTYSMALLCAP": "Nifty Smallcap 250",
+            "NIFTYMF":       "Nifty MF Index",
+            "CRISIL_BOND":   "CRISIL Bond Index",
+            "GOLD":          "Gold (MCX)",
+            "CUSTOM":        "Custom / No Benchmark",
+        }
+
+        # Suggest benchmarks based on portfolio composition
+        ac_weights = {}
+        for h in holdings:
+            p, _ = _p(h["symbol"], pmap)
+            v    = h["quantity"] * (p or h["avg_cost"])
+            ac_weights[h["asset_class"]] = ac_weights.get(h["asset_class"],0) + v
+        dominant_ac = max(ac_weights, key=ac_weights.get) if ac_weights else "Equity"
+        suggested = {
+            "Equity":"NIFTY50","Mutual Fund":"NIFTY500","ETF":"NIFTY50",
+            "Bond":"CRISIL_BOND","Bank FD":"CRISIL_BOND",
+            "Commodity":"GOLD","Physical Gold":"GOLD",
+        }.get(dominant_ac,"NIFTY50")
+
+        st.caption(f"Suggested benchmark for your portfolio: **{BENCHMARK_OPTIONS[suggested]}** "
+                   f"(dominant asset class: {dominant_ac})")
+
+        # Multi-select — up to 5 benchmarks
+        bm_keys = list(BENCHMARK_OPTIONS.keys())
+        bm_labels = list(BENCHMARK_OPTIONS.values())
+        default_sel = [suggested] if suggested in bm_keys else ["NIFTY50"]
+
+        selected_bms = st.multiselect(
+            "Select benchmarks to compare (up to 5)",
+            options=bm_keys,
+            default=default_sel,
+            format_func=lambda x: BENCHMARK_OPTIONS[x],
+            max_selections=5,
+            key="bench_select"
+        )
+
+        # Asset selection — pick which holdings to include in portfolio return
+        with st.expander("🎯 Select specific assets for comparison (default: all)"):
+            sym_list = list({h["symbol"] for h in holdings})
+            selected_syms = st.multiselect(
+                "Holdings to include",
+                options=sym_list,
+                default=sym_list,
+                key="bench_asset_sel"
+            )
+            if selected_syms != sym_list:
+                filtered_h   = [h for h in holdings if h["symbol"] in selected_syms]
+                f_inv, f_cur = _stats(filtered_h, pmap)
+                f_pnl_pct    = ((f_cur-f_inv)/f_inv*100) if f_inv else 0
+                st.caption(f"Selected subset: ₹{indian_format(f_cur)} current value, "
+                           f"{f_pnl_pct:+.2f}% return")
+                compare_pnl_pct = f_pnl_pct
+            else:
+                compare_pnl_pct = pnl_pct
+
+        # Build comparison rows
+        compare_rows = [("📁 This Portfolio", compare_pnl_pct, True)]
+        idx_map = {i["symbol"]:i for i in indices}
+        for bm_key in selected_bms:
+            if bm_key == "CUSTOM": continue
+            # Match against live indices
+            bm_label = BENCHMARK_OPTIONS[bm_key]
+            matched  = next((i for i in indices
+                              if bm_key.lower() in i["symbol"].lower()
+                              or bm_key.lower() in i["name"].lower()), None)
+            if matched:
+                compare_rows.append((bm_label, matched["change_pct"], False))
+            else:
+                compare_rows.append((bm_label + " (no data)", 0.0, False))
+
+        # Display comparison
+        hdr = st.columns([3, 1.5, 1.5])
+        for col, lbl in zip(hdr, ["", "Change", "vs Portfolio"]):
+            col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>",
+                         unsafe_allow_html=True)
+        for name, chg, is_pf in compare_rows:
             pc   = "#2ECC7A" if chg>=0 else "#FF5A5A"
             sign = "▲" if chg>=0 else "▼"
-            is_pf = name.startswith("📁")
+            diff = chg - compare_pnl_pct
             border = "2px solid #4F7EFF" if is_pf else "1px solid #252D40"
-            st.markdown(
-                f'<div style="display:flex;justify-content:space-between;align-items:center;'
-                f'background:#161B27;border:{border};border-radius:7px;'
-                f'padding:.6rem 1rem;margin-bottom:.4rem">'
-                f'<span style="font-size:.84rem;{"font-weight:700;color:#7BA3FF" if is_pf else "color:#C8D0E0"}">{name}</span>'
-                f'<span style="color:{pc};font-weight:700;font-size:.9rem">{sign} {abs(chg):.2f}%</span></div>',
+            rc = st.columns([3, 1.5, 1.5])
+            rc[0].markdown(
+                f'<div style="background:#161B27;border:{border};border-radius:7px;'
+                f'padding:.55rem 1rem;">'
+                f'<span style="font-size:.84rem;{"font-weight:700;color:#7BA3FF" if is_pf else "color:#C8D0E0"}">'
+                f'{name}</span></div>',
                 unsafe_allow_html=True)
+            rc[1].markdown(
+                f'<div style="padding:.55rem 0;color:{pc};font-weight:700;font-size:.88rem">'
+                f'{sign} {abs(chg):.2f}%</div>',
+                unsafe_allow_html=True)
+            if not is_pf:
+                dc = "#2ECC7A" if diff > 0 else "#FF5A5A" if diff < 0 else "#8892AA"
+                ds = "+" if diff > 0 else ""
+                rc[2].markdown(
+                    f'<div style="padding:.55rem 0;color:{dc};font-size:.84rem">'
+                    f'{ds}{diff:.2f}%</div>',
+                    unsafe_allow_html=True)
 
     # ── RISK ──────────────────────────────────────────────────────────────
     with t_risk:
@@ -401,7 +495,7 @@ def render():
 
         st.markdown("""
         <div style="background:#0F1117;border:1px solid #252D40;border-radius:8px;
-            padding:.8rem 1rem;margin-top:.6rem;font-size:.75rem;color:#8892AA;line-height:1.8">
+            padding:.8rem 1rem;margin-top:.6rem;font-size:.76rem;color:#8892AA;line-height:1.8">
             <b style="color:#C8D0E0">Interpretation guide</b><br>
             Volatility &lt; 10%: Low risk · 10–20%: Moderate · &gt; 20%: High<br>
             Sharpe &gt; 1.0: Good · &gt; 2.0: Excellent · &lt; 0: Underperforming risk-free rate<br>
@@ -455,7 +549,7 @@ def render():
             st.markdown('<h4 style="margin:.8rem 0 .3rem 0;font-size:.95rem;color:#F0F4FF">Sensitivity Table</h4>', unsafe_allow_html=True)
             hdr = st.columns([2,2,2,2])
             for col,lbl in zip(hdr,["Yield Change","ΔPortfolio Value","New Portfolio Value","Impact"]):
-                col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
+                col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
             for label, dy in scenarios:
                 delta_v = (- cur * port_duration * dy
@@ -550,7 +644,7 @@ def render():
                         {'+'if total_scenario_pnl>=0 else ''}₹{indian_format(abs(total_scenario_pnl))}
                         &nbsp;<span style="font-size:1.2rem">({total_pct:+.2f}%)</span>
                     </div>
-                    <div style="font-size:.75rem;color:#8892AA;margin-top:.3rem">
+                    <div style="font-size:.76rem;color:#8892AA;margin-top:.3rem">
                         New Portfolio Value: ₹{indian_format(cur + total_scenario_pnl)}
                     </div>
                 </div>""", unsafe_allow_html=True)
@@ -559,16 +653,16 @@ def render():
                 st.markdown("#### Per-Holding Impact")
                 hdr = st.columns([2,1.5,1.5,1.5,1.5])
                 for col,lbl in zip(hdr,["Symbol","Asset Class","Value","Scenario Return","P&L Impact"]):
-                    col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
+                    col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
                 st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
                 for sym, ac, val, w, sret, spnl in sorted(holding_results, key=lambda x:-abs(x[5])):
                     pc = "#2ECC7A" if spnl>=0 else "#FF5A5A"
                     rc = st.columns([2,1.5,1.5,1.5,1.5])
                     rc[0].markdown(f"<div style='font-weight:600;font-size:.85rem'>{sym}</div>", unsafe_allow_html=True)
                     rc[1].markdown(f"<div style='font-size:.8rem;color:#8892AA'>{ac}</div>", unsafe_allow_html=True)
-                    rc[2].markdown(f"<div style='font-size:.83rem'>₹{indian_format(val)}</div>", unsafe_allow_html=True)
-                    rc[3].markdown(f"<div style='color:{pc};font-size:.83rem'>{sret:+.2f}%</div>", unsafe_allow_html=True)
-                    rc[4].markdown(f"<div style='color:{pc};font-weight:600;font-size:.83rem'>₹{indian_format(abs(spnl))}</div>", unsafe_allow_html=True)
+                    rc[2].markdown(f"<div style='font-size:.88rem'>₹{indian_format(val)}</div>", unsafe_allow_html=True)
+                    rc[3].markdown(f"<div style='color:{pc};font-size:.88rem'>{sret:+.2f}%</div>", unsafe_allow_html=True)
+                    rc[4].markdown(f"<div style='color:{pc};font-weight:600;font-size:.88rem'>₹{indian_format(abs(spnl))}</div>", unsafe_allow_html=True)
                     st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
 
     # ── CORRELATION MATRIX (advisor only) ────────────────────────────────
@@ -630,7 +724,7 @@ def render():
                     header_cols = st.columns([2] + [1.2]*len(acs))
                     header_cols[0].markdown("", unsafe_allow_html=True)
                     for i, ac in enumerate(acs):
-                        header_cols[i+1].markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600;text-align:center'>{ac[:8]}</div>", unsafe_allow_html=True)
+                        header_cols[i+1].markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600;text-align:center'>{ac[:8]}</div>", unsafe_allow_html=True)
 
                     for a in acs:
                         row_cols = st.columns([2] + [1.2]*len(acs))
@@ -647,7 +741,7 @@ def render():
                                 cell_c = "#C8D0E0"; cell_bg = "#161B27"
                             row_cols[i+1].markdown(
                                 f'<div style="background:{cell_bg};border-radius:5px;padding:.3rem;'
-                                f'text-align:center;font-weight:600;font-size:.82rem;color:{cell_c}">'
+                                f'text-align:center;font-weight:600;font-size:.88rem;color:{cell_c}">'
                                 f'{c_val:.2f}</div>',
                                 unsafe_allow_html=True)
 
@@ -700,44 +794,99 @@ def render():
 
                 st.markdown(f"""
                 <div style="background:#0F1117;border:1px solid #252D40;border-radius:8px;
-                    padding:.8rem 1rem;margin-top:.6rem;font-size:.75rem;color:#8892AA;line-height:1.8">
+                    padding:.8rem 1rem;margin-top:.6rem;font-size:.76rem;color:#8892AA;line-height:1.8">
                     <b style="color:#C8D0E0">Interpretation</b><br>
                     VaR 95% = On any given day, there is a 5% chance of losing more than {var_95_daily:.2f}% (₹{indian_format(cur*var_95_daily/100)}).<br>
                     CVaR = When losses exceed VaR, the average loss is {cvar_pct:.2f}%.<br>
                     Based on {len(port_returns_var)} trading days of historical data.
                 </div>""", unsafe_allow_html=True)
 
-    # ── CROSS-PORTFOLIO (advisor only) ────────────────────────────────────
+    # ── PORTFOLIO DEEP-DIVE — within selected client/user ────────────────
     if t_cross:
         with t_cross:
-            if role not in ("advisor","owner"):
-                st.info("Advisor only."); return
-            rows = []
-            for cl in get_advisor_clients(user["id"]):
-                for pf in get_portfolios_for_ac(cl["id"]):
-                    hs          = get_portfolio_holdings(pf["id"])
-                    pi, pv      = _stats(hs, pmap)
-                    pp          = pv - pi
-                    ppc         = (pp/pi*100) if pi else 0
-                    rows.append({"Client":cl["client_name"],"Portfolio":pf["name"],
-                                 "Invested":pi,"Value":pv,"PnL":pp,"Ret%":ppc,"N":len(hs)})
-            if not rows: st.info("No data."); return
+            st.markdown("#### Portfolio Deep-Dive")
+            st.markdown('<div style="font-size:.78rem;color:#8892AA;margin-bottom:.8rem">'
+                        'Compare individual portfolios and their assets for the selected client. '
+                        'Analyse performance, asset overlap, and return distribution across portfolios.</div>',
+                        unsafe_allow_html=True)
 
-            total_aum = sum(r["Value"] for r in rows)
-            st.markdown(f'<div style="font-size:.82rem;color:#8892AA;margin-bottom:.5rem">Total AUM across all portfolios: <b style="color:#F0F4FF">₹{indian_format(total_aum)}</b></div>', unsafe_allow_html=True)
+            if not all_pfs:
+                st.info("No portfolios found."); return
 
-            hdr = st.columns([2,2.5,2,2,2,1.5,1])
-            for col,lbl in zip(hdr,["Client","Portfolio","Invested","Value","P&L","Return","Holdings"]):
-                col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
+            # Side-by-side portfolio comparison
+            pf_data = []
+            for pf in all_pfs:
+                hs       = get_portfolio_holdings(pf["id"])
+                pi, pv   = _stats(hs, pmap)
+                pp       = pv - pi
+                ppc      = (pp/pi*100) if pi else 0
+                pf_data.append({
+                    "id": pf["id"], "name": pf["name"],
+                    "vis": pf.get("visibility","shared"),
+                    "invested": pi, "value": pv, "pnl": pp, "ret": ppc,
+                    "n": len(hs), "holdings": hs
+                })
+
+            # Summary table
+            hdr = st.columns([3, 2, 2, 2, 1.5, 1])
+            for col, lbl in zip(hdr, ["Portfolio","Invested","Current Value","P&L","Return","Holdings"]):
+                col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>",
+                             unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
-            for r in sorted(rows, key=lambda x:-x["Ret%"]):
-                pc = "#2ECC7A" if r["Ret%"]>=0 else "#FF5A5A"
-                rc = st.columns([2,2.5,2,2,2,1.5,1])
-                rc[0].markdown(f"<div style='font-size:.82rem;color:#8892AA'>{r['Client']}</div>", unsafe_allow_html=True)
-                rc[1].markdown(f"<div style='font-weight:600;font-size:.87rem'>{r['Portfolio']}</div>", unsafe_allow_html=True)
-                rc[2].markdown(f"<div style='font-size:.83rem'>₹{indian_format(r['Invested'])}</div>", unsafe_allow_html=True)
-                rc[3].markdown(f"<div style='font-size:.83rem'>₹{indian_format(r['Value'])}</div>", unsafe_allow_html=True)
-                rc[4].markdown(f"<div style='color:{pc};font-weight:600;font-size:.83rem'>₹{indian_format(abs(r['PnL']))}</div>", unsafe_allow_html=True)
-                rc[5].markdown(f"<div style='color:{pc};font-weight:700;font-size:.87rem'>{r['Ret%']:+.1f}%</div>", unsafe_allow_html=True)
-                rc[6].markdown(f"<div style='font-size:.83rem;color:#8892AA'>{r['N']}</div>", unsafe_allow_html=True)
+            for pf in sorted(pf_data, key=lambda x:-x["ret"]):
+                pc  = "#2ECC7A" if pf["ret"]>=0 else "#FF5A5A"
+                vis = "🟢" if pf["vis"]=="shared" else "🔒"
+                rc  = st.columns([3, 2, 2, 2, 1.5, 1])
+                rc[0].markdown(f"<div style='font-weight:600;font-size:.9rem'>{vis} {pf['name']}</div>", unsafe_allow_html=True)
+                rc[1].markdown(f"<div style='font-size:.88rem'>₹{indian_format(pf['invested'])}</div>", unsafe_allow_html=True)
+                rc[2].markdown(f"<div style='font-size:.88rem'>₹{indian_format(pf['value'])}</div>", unsafe_allow_html=True)
+                rc[3].markdown(f"<div style='color:{pc};font-weight:600;font-size:.88rem'>₹{indian_format(abs(pf['pnl']))}</div>", unsafe_allow_html=True)
+                rc[4].markdown(f"<div style='color:{pc};font-weight:700;font-size:.9rem'>{pf['ret']:+.1f}%</div>", unsafe_allow_html=True)
+                rc[5].markdown(f"<div style='font-size:.88rem;color:#8892AA'>{pf['n']}</div>", unsafe_allow_html=True)
                 st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
+
+            if len(pf_data) < 2:
+                st.info("Add more portfolios to compare them side-by-side."); return
+
+            st.markdown(""); st.markdown("#### Asset Overlap Between Portfolios")
+            # Find assets that appear in multiple portfolios
+            sym_pfs = {}
+            for pf in pf_data:
+                for h in pf["holdings"]:
+                    sym_pfs.setdefault(h["symbol"], []).append(pf["name"])
+            overlap = {s: pfs for s, pfs in sym_pfs.items() if len(pfs) > 1}
+            if overlap:
+                for sym, pf_names in sorted(overlap.items()):
+                    st.markdown(
+                        f'<div style="font-size:.88rem;padding:.3rem 0">'
+                        f'<span style="font-weight:600;color:#F0F4FF">{sym}</span>'
+                        f' &nbsp;·&nbsp; <span style="color:#8892AA">Appears in: {", ".join(pf_names)}</span></div>',
+                        unsafe_allow_html=True)
+            else:
+                st.info("No asset overlap across portfolios.")
+
+            st.markdown(""); st.markdown("#### Return Distribution")
+            all_returns = []
+            for pf in pf_data:
+                for h in pf["holdings"]:
+                    p, _ = _p(h["symbol"], pmap)
+                    ret  = ((p - h["avg_cost"])/h["avg_cost"]*100) if h["avg_cost"] else 0
+                    all_returns.append({
+                        "Symbol": h["symbol"],
+                        "Portfolio": pf["name"],
+                        "Asset Class": h["asset_class"],
+                        "Return %": round(ret,2),
+                        "Value": round(h["quantity"]*(p or h["avg_cost"]),2)
+                    })
+            if all_returns:
+                import pandas as pd
+                df = pd.DataFrame(all_returns).sort_values("Return %", ascending=False)
+                # Style the table
+                top5    = df.head(5)
+                bottom5 = df.tail(5)
+                st.caption("Top 5 performing assets")
+                st.dataframe(top5[["Symbol","Portfolio","Asset Class","Return %"]]
+                             .reset_index(drop=True), use_container_width=True)
+                st.caption("Bottom 5 performing assets")
+                st.dataframe(bottom5[["Symbol","Portfolio","Asset Class","Return %"]]
+                             .reset_index(drop=True), use_container_width=True)

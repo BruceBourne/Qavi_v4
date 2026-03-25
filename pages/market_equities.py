@@ -16,13 +16,13 @@ def _row(a, prices, key_sfx):
     sector = a.get("sector","") or "—"
     hc   = st.columns([2.5, 1.8, 1.2, 1.2, 1.5, 1.8, 0.6])
     hc[0].markdown(
-        f"<div style='font-weight:600;font-size:.87rem'>{a['symbol']}</div>"
+        f"<div style='font-weight:600;font-size:.9rem'>{a['symbol']}</div>"
         f"<div style='font-size:.7rem;color:#8892AA'>{a['name']}</div>",
         unsafe_allow_html=True)
     hc[1].markdown(
-        f"<div style='font-size:.75rem;color:#8892AA'>{sector}</div>",
+        f"<div style='font-size:.76rem;color:#8892AA'>{sector}</div>",
         unsafe_allow_html=True)
-    hc[2].markdown(f"<div style='font-size:.83rem'>₹{indian_format(p.get('open',0))}</div>", unsafe_allow_html=True)
+    hc[2].markdown(f"<div style='font-size:.88rem'>₹{indian_format(p.get('open',0))}</div>", unsafe_allow_html=True)
     hc[3].markdown(
         f"<div style='font-size:.78rem;color:#2ECC7A'>₹{indian_format(p.get('high',0))}</div>"
         f"<div style='font-size:.75rem;color:#FF5A5A'>₹{indian_format(p.get('low',0))}</div>",
@@ -74,7 +74,7 @@ def render():
 
     hdr = st.columns([2.5, 1.8, 1.2, 1.2, 1.5, 1.8, 0.6])
     for col, lbl in zip(hdr, ["Symbol", "Sector", "Open", "High / Low", "LTP", "Change", ""]):
-        col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>",
+        col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>",
                      unsafe_allow_html=True)
     st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
 

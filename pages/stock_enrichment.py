@@ -55,60 +55,80 @@ def _fetch_sebi_classification():
     sess = _nse_session()
     sym_to_cap = {}
 
-    # ── Source 1: NSE MCAP CSV ─────────────────────────────────────────────
-    # SEBI defines Large Cap as top 100, Mid Cap as 101-250, Small Cap 251+
-    # by market capitalisation. The MCAP.csv file is already sorted by market cap.
-    # We read actual row counts — no hardcoded limits — so if SEBI changes to 102 
-    # large cap or 152 mid cap, it works correctly.
-    mcap_urls = [
+    # ── Source 1: NSE/AMFI Cap Classification Files ────────────────────────
+    # NSE MCAP.csv: columns vary, may not be sorted by market cap rank
+    # AMFI categorization file: has explicit Large/Mid/Small labels
+    # Try multiple sources, prefer explicit category labels over rank-based
+    cap_urls = [
+        # AMFI categorization (explicit Large/Mid/Small labels — most reliable)
+        "https://www.amfiindia.com/research-information/other-data/categorization-of-stocks",
+        # NSE archives
         "https://nsearchives.nseindia.com/content/equities/MCAP.csv",
         "https://nsearchives.nseindia.com/content/equities/mcap.csv",
         "https://www.nseindia.com/content/equities/MCAP.csv",
     ]
-    for url in mcap_urls:
+    for url in cap_urls:
         try:
-            r = sess.get(url, headers={"Referer":"https://www.nseindia.com/"}, timeout=15)
-            if r.status_code == 200 and len(r.content) > 1000:
-                lines      = r.text.strip().split("\n")
-                header     = [h.strip().strip('"').lower() for h in lines[0].split(",")]
-                seen_syms  = set()
-                rank       = 0
-                local_caps = {}
+            r = sess.get(url, headers={"Referer": "https://www.nseindia.com/"}, timeout=15)
+            if r.status_code != 200 or len(r.content) < 500:
+                continue
 
-                # Detect column positions — MCAP.csv format varies
-                sym_idx = next((i for i,h in enumerate(header)
-                                if h in ("symbol","sym","ticker","scrip_cd")), 0)
-                cat_idx = next((i for i,h in enumerate(header)
-                                if "category" in h or "cap" in h or "classification" in h), None)
+            lines  = r.text.strip().split("\n")
+            if not lines: continue
+            header = [h.strip().strip('"').lower().replace(" ","_")
+                      for h in lines[0].split(",")]
 
-                for line in lines[1:]:
-                    parts = [p.strip().strip('"') for p in line.split(",")]
-                    if len(parts) <= sym_idx: continue
-                    sym = parts[sym_idx].upper()
-                    if not sym or sym in seen_syms: continue
-                    seen_syms.add(sym)
-                    rank += 1
+            # Find column indices
+            sym_idx = next((i for i,h in enumerate(header)
+                            if h in ("symbol","sym","ticker","scrip_cd","nse_symbol")), 0)
+            cat_idx = next((i for i,h in enumerate(header)
+                            if any(k in h for k in ("category","cap","classification","group"))), None)
 
-                    # If file has a category column, use it directly
-                    if cat_idx and cat_idx < len(parts):
-                        cat = parts[cat_idx].strip()
-                        if cat in ("Large Cap","Mid Cap","Small Cap"):
-                            local_caps[sym] = cat
-                            continue
+            # Check if file has explicit category labels
+            has_explicit_cats = False
+            if cat_idx is not None:
+                sample = [l.split(",")[cat_idx].strip().strip('"')
+                          for l in lines[1:min(10,len(lines))] if len(l.split(",")) > cat_idx]
+                has_explicit_cats = any(s in ("Large Cap","Mid Cap","Small Cap") for s in sample)
 
-                    # Otherwise classify by rank position (SEBI boundaries)
-                    local_caps[sym] = ("Large Cap" if rank <= 100
-                                       else "Mid Cap" if rank <= 250
-                                       else "Small Cap")
+            seen_syms  = set()
+            rank       = 0
+            local_caps = {}
 
-                n_large = sum(1 for v in local_caps.values() if v=="Large Cap")
-                n_mid   = sum(1 for v in local_caps.values() if v=="Mid Cap")
-                n_small = sum(1 for v in local_caps.values() if v=="Small Cap")
+            for line in lines[1:]:
+                parts = [p.strip().strip('"') for p in line.split(",")]
+                if len(parts) <= sym_idx: continue
+                sym = parts[sym_idx].upper().strip()
+                # Filter out non-equity series suffixes (e.g. RELIANCE-BE → skip, RELIANCE → keep)
+                if not sym or "-" in sym or sym in seen_syms: continue
+                # Skip header repeats
+                if sym.lower() in ("symbol","sym","ticker"): continue
+                seen_syms.add(sym)
 
-                if len(local_caps) >= 500:
-                    return (local_caps,
-                            f"MCAP.csv — L:{n_large} M:{n_mid} S:{n_small} "
-                            f"({len(local_caps)} total)")
+                if has_explicit_cats and cat_idx is not None and cat_idx < len(parts):
+                    cat = parts[cat_idx].strip()
+                    if cat in ("Large Cap","Mid Cap","Small Cap"):
+                        local_caps[sym] = cat
+                        continue
+                    # Skip row if category present but not one of the three
+                    continue
+
+                # Rank-based only if NO explicit category column
+                rank += 1
+                local_caps[sym] = ("Large Cap" if rank <= 100
+                                   else "Mid Cap" if rank <= 250
+                                   else "Small Cap")
+
+            n_large = sum(1 for v in local_caps.values() if v=="Large Cap")
+            n_mid   = sum(1 for v in local_caps.values() if v=="Mid Cap")
+            n_small = sum(1 for v in local_caps.values() if v=="Small Cap")
+
+            # Accept only if counts are plausible (Large ≤ 150, Mid ≤ 200)
+            if len(local_caps) >= 100 and n_large <= 150 and n_mid <= 200:
+                src_label = "AMFI" if "amfi" in url else "MCAP.csv"
+                return (local_caps,
+                        f"{src_label} — L:{n_large} M:{n_mid} S:{n_small} "
+                        f"({len(local_caps)} total, {'explicit labels' if has_explicit_cats else 'rank-based'})")
         except Exception:
             continue
 

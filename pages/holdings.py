@@ -131,7 +131,7 @@ def render():
             cols_w = [2.5,1.2,1.2,1.5,1.5,2,0.5] if can_edit else [2.5,1.2,1.2,1.5,1.5,2]
             hdr    = st.columns(cols_w)
             for col,lbl in zip(hdr,["Symbol","Asset","Qty","Buy Cost","Closing Price","P&L"]+([""]*1 if can_edit else [])):
-                col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
+                col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
             for h in rpc_h:
                 p=h.get("close_price",0); chg=h.get("change_pct",0)
@@ -139,7 +139,7 @@ def render():
                 pc="#2ECC7A" if hpnl>=0 else "#FF5A5A"; cc="#2ECC7A" if chg>=0 else "#FF5A5A"
                 flag="⚠️ " if h.get("is_manual") and not h.get("is_verified") else ""
                 hc=st.columns(cols_w)
-                hc[0].markdown(f"<div style='font-weight:600;font-size:.88rem'>{flag}{h['symbol']}</div><div style='font-size:.72rem;color:#8892AA'>{h.get('sub_class','')}</div>", unsafe_allow_html=True)
+                hc[0].markdown(f"<div style='font-weight:600;font-size:.88rem'>{flag}{h['symbol']}</div><div style='font-size:.76rem;color:#8892AA'>{h.get('sub_class','')}</div>", unsafe_allow_html=True)
                 hc[1].markdown(f"<span class='badge badge-{h['asset_class'][:2].lower()}'>{h['asset_class'][:3]}</span>", unsafe_allow_html=True)
                 hc[2].markdown(f"<div style='font-size:.84rem'>{h['quantity']:g} {h.get('unit_type','')}</div>", unsafe_allow_html=True)
                 hc[3].markdown(f"<div style='font-size:.84rem'>₹{indian_format(h['avg_cost'])}</div>", unsafe_allow_html=True)
@@ -156,10 +156,10 @@ def render():
         for t in txns[:50]:
             tc="#2ECC7A" if t["txn_type"] in ("BUY","SIP") else "#FF5A5A"
             rc=st.columns([1,2,1.5,1.5,2,2])
-            rc[0].markdown(f"<span style='color:{tc};font-weight:700;font-size:.82rem'>{t['txn_type']}</span>", unsafe_allow_html=True)
+            rc[0].markdown(f"<span style='color:{tc};font-weight:700;font-size:.88rem'>{t['txn_type']}</span>", unsafe_allow_html=True)
             rc[1].markdown(f"<span style='font-weight:600;font-size:.84rem'>{t['symbol']}</span>", unsafe_allow_html=True)
-            rc[2].markdown(f"<span style='font-size:.82rem'>{t['quantity']:g}</span>", unsafe_allow_html=True)
-            rc[3].markdown(f"<span style='font-size:.82rem'>@ ₹{indian_format(t['price'])}</span>", unsafe_allow_html=True)
+            rc[2].markdown(f"<span style='font-size:.88rem'>{t['quantity']:g}</span>", unsafe_allow_html=True)
+            rc[3].markdown(f"<span style='font-size:.88rem'>@ ₹{indian_format(t['price'])}</span>", unsafe_allow_html=True)
             rc[4].markdown(f"<span style='font-weight:600'>₹{indian_format(t['amount'])}</span>", unsafe_allow_html=True)
             rc[5].markdown(f"<span style='font-size:.78rem;color:#8892AA'>{fmt_date(t.get('txn_date',''))}</span>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
@@ -236,7 +236,7 @@ def render():
                     tenure = sym_ten.get(symbol)
                     if rate:
                         st.markdown(f"""<div style="background:#1E2535;border:1px solid #2ECC7A;
-                            border-radius:8px;padding:.65rem 1rem;margin:.35rem 0;font-size:.82rem">
+                            border-radius:8px;padding:.65rem 1rem;margin:.35rem 0;font-size:.88rem">
                             <span style="color:#8892AA">Interest Rate: </span>
                             <span style="color:#2ECC7A;font-weight:700">{rate:.2f}% p.a.</span>
                             {'&nbsp;·&nbsp;<span style="color:#8892AA">Tenure: </span><span>' + str(tenure) + ' yr</span>' if tenure else ''}
@@ -246,7 +246,7 @@ def render():
                     if cur_p:
                         cc="#2ECC7A" if chg>=0 else "#FF5A5A"
                         st.markdown(f"""<div style="background:#1E2535;border:1px solid #252D40;
-                            border-radius:8px;padding:.65rem 1rem;margin:.35rem 0;font-size:.82rem">
+                            border-radius:8px;padding:.65rem 1rem;margin:.35rem 0;font-size:.88rem">
                             <span style="color:#8892AA">Closing Price: </span>
                             <span style="font-weight:700">₹{indian_format(cur_p)}</span>
                             &nbsp;<span style="color:{cc};font-size:.77rem">{chg:+.2f}%</span>

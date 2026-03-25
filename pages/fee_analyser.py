@@ -93,13 +93,13 @@ def render():
         st.markdown("#### Per-Client Breakdown")
         hdr = st.columns([2.5,2,1.5,1.5,1.5,2])
         for col,lbl in zip(hdr,["Client","AUM","One-Time","Consultation","Management","Best Model"]):
-            col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
+            col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
         st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
         type_colors = {"ot":"#4F7EFF","cons":"#A855F7","mgmt":"#2ECC7A"}
         type_labels = {"ot":"One-Time","cons":"Consultation","mgmt":"Management"}
         for r in sorted(rows, key=lambda x:-x["aum"]):
             rc = st.columns([2.5,2,1.5,1.5,1.5,2])
-            rc[0].markdown(f"<div style='font-weight:600;font-size:.87rem'>{r['client']}</div>", unsafe_allow_html=True)
+            rc[0].markdown(f"<div style='font-weight:600;font-size:.9rem'>{r['client']}</div>", unsafe_allow_html=True)
             rc[1].markdown(f"<div style='font-size:.84rem'>₹{indian_format(r['aum'])}</div>", unsafe_allow_html=True)
             rc[2].markdown(f"<div style='font-size:.84rem;color:#4F7EFF'>₹{indian_format(r['ot'])}</div>", unsafe_allow_html=True)
             rc[3].markdown(f"<div style='font-size:.84rem;color:#A855F7'>₹{indian_format(r['cons'])}</div>", unsafe_allow_html=True)

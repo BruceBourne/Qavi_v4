@@ -59,14 +59,14 @@ def render():
             st.markdown('<div class="section-label">Clients</div>', unsafe_allow_html=True)
             hdr = st.columns([3, 2, 1.5, 2, 0.8])
             for col, lbl in zip(hdr, ["Client","Risk","Portfolios","AUM",""]):
-                col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
+                col.markdown(f"<div style='font-size:.76rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
             st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
             for r in rows:
                 pc = "#2ECC7A" if r.get("total_pnl",0)>=0 else "#FF5A5A"
                 c1,c2,c3,c4,c5 = st.columns([3,2,1.5,2,0.8])
-                c1.markdown(f"<div style='font-weight:600'>{title_case(r['client_name'])}</div><div style='font-size:.75rem;color:#8892AA'>{r.get('client_email','')}</div>", unsafe_allow_html=True)
-                c2.markdown(f"<div style='font-size:.82rem;color:#8892AA;padding-top:.35rem'>{r.get('risk_profile','Moderate')}</div>", unsafe_allow_html=True)
-                c3.markdown(f"<div style='font-size:.82rem;padding-top:.35rem'>{r.get('portfolio_count',0)}</div>", unsafe_allow_html=True)
+                c1.markdown(f"<div style='font-weight:600'>{title_case(r['client_name'])}</div><div style='font-size:.76rem;color:#8892AA'>{r.get('client_email','')}</div>", unsafe_allow_html=True)
+                c2.markdown(f"<div style='font-size:.88rem;color:#8892AA;padding-top:.35rem'>{r.get('risk_profile','Moderate')}</div>", unsafe_allow_html=True)
+                c3.markdown(f"<div style='font-size:.88rem;padding-top:.35rem'>{r.get('portfolio_count',0)}</div>", unsafe_allow_html=True)
                 c4.markdown(f"<div style='font-weight:600;padding-top:.3rem'>{inr(r.get('total_aum',0))}</div><div style='font-size:.75rem;color:{pc}'>{inr(r.get('total_pnl',0))}</div>", unsafe_allow_html=True)
                 if c5.button("→", key=f"dc_{r['client_id']}"):
                     st.session_state.selected_ac_id = r["client_id"]; navigate("portfolios")
@@ -106,7 +106,7 @@ def render():
                 pc     = "#2ECC7A" if pf_pnl>=0 else "#FF5A5A"
                 vis    = "🟢" if r.get("visibility")=="shared" else "🔒"
                 c1, c2, c3, c4 = st.columns([3, 2, 2, 0.8])
-                c1.markdown(f"<div style='font-weight:600'>{vis} {r['portfolio_name']}</div><div style='font-size:.75rem;color:#8892AA'>{r.get('holding_count',0)} holdings</div>", unsafe_allow_html=True)
+                c1.markdown(f"<div style='font-weight:600'>{vis} {r['portfolio_name']}</div><div style='font-size:.76rem;color:#8892AA'>{r.get('holding_count',0)} holdings</div>", unsafe_allow_html=True)
                 c2.markdown(f"<div style='padding-top:.3rem'>{inr(r.get('total_current',0))}</div>", unsafe_allow_html=True)
                 c3.markdown(f"<div style='color:{pc};font-weight:600;padding-top:.3rem'>{inr(pf_pnl)} ({pf_pct:+.1f}%)</div>", unsafe_allow_html=True)
                 if c4.button("→", key=f"dpf_{r['portfolio_id']}"):
