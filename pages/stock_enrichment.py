@@ -288,19 +288,25 @@ def render():
             try:
                 import pandas as pd
                 cap_df = pd.read_csv(cap_file)
-                cap_df.columns = [c.strip().lower() for c in cap_df.columns]
+                # Normalise column names (case-flexible) while preserving values
+                cap_df.columns = [
+                    c.strip().lower().replace(" ","_").replace("-","_")
+                    for c in cap_df.columns
+                ]
 
-                # Accept symbol+cap OR symbol+rank columns
-                sym_col = next((c for c in cap_df.columns if c in ("symbol","ticker","sym")), None)
-                cap_col = next((c for c in cap_df.columns if c in ("cap","category","sub_class","classification")), None)
-                rank_col= next((c for c in cap_df.columns if c in ("rank","sr","serial","mcap_rank","no")), None)
+                # Flexible column detection — case-insensitive after normalisation
+                sym_col  = next((c for c in cap_df.columns if c in ("symbol","ticker","sym","nse_symbol")), None)
+                cap_col  = next((c for c in cap_df.columns if c in ("cap","category","sub_class","classification","cap_category")), None)
+                rank_col = next((c for c in cap_df.columns if c in ("rank","sr","serial","mcap_rank","no","sr_no")), None)
 
                 if sym_col and (cap_col or rank_col):
                     manual_caps = {}
                     seen = set()
-                    for i, row in cap_df.iterrows():
+                    for _, row in cap_df.iterrows():
+                        # EXACT symbol match — strip whitespace + uppercase only, no fuzzy
                         sym = str(row[sym_col]).strip().upper()
-                        if not sym or sym in seen: continue
+                        if not sym or sym in seen or sym.lower() in ("symbol","ticker","nan",""):
+                            continue
                         seen.add(sym)
                         if cap_col:
                             val = str(row[cap_col]).strip()
@@ -309,8 +315,8 @@ def render():
                         elif rank_col:
                             try:
                                 rank = int(float(str(row[rank_col])))
-                                manual_caps[sym] = ("Large Cap" if rank<=100
-                                                    else "Mid Cap" if rank<=250
+                                manual_caps[sym] = ("Large Cap" if rank <= 100
+                                                    else "Mid Cap" if rank <= 250
                                                     else "Small Cap")
                             except ValueError:
                                 pass
@@ -318,10 +324,16 @@ def render():
                     if manual_caps:
                         counts = {c: sum(1 for v in manual_caps.values() if v==c)
                                   for c in ("Large Cap","Mid Cap","Small Cap")}
-                        st.success(f"✅ {len(manual_caps)} stocks parsed — "
-                                   f"Large: {counts['Large Cap']}, "
-                                   f"Mid: {counts['Mid Cap']}, "
-                                   f"Small: {counts['Small Cap']}")
+                        st.success(
+                            f"✅ {len(manual_caps)} stocks parsed — "
+                            f"Large: {counts['Large Cap']}, "
+                            f"Mid: {counts['Mid Cap']}, "
+                            f"Small: {counts['Small Cap']}"
+                        )
+                        st.info(
+                            "⚠️ Equity assets currently classified as Large/Mid Cap that are "
+                            "**not present** in this cap file will be moved to **Small Cap**."
+                        )
 
                         # Store in session so progress survives rerun
                         st.session_state["_manual_caps"] = manual_caps
@@ -329,12 +341,60 @@ def render():
                         if st.button("Apply this cap data to database",
                                      use_container_width=True, key="apply_manual_caps"):
                             caps_to_apply = st.session_state.get("_manual_caps", manual_caps)
-                            items  = list(caps_to_apply.items())
-                            ok = err = 0
-                            prog_m   = st.progress(0.0, text="Starting…")
+
+                            # ── Step 1: fetch ALL equity assets from DB ───
+                            prog_m   = st.progress(0.0, text="Fetching equity assets from database…")
                             status_m = st.empty()
-                            BATCH    = 100
-                            # Batch update for speed
+                            try:
+                                all_eq = []
+                                _pg = 0
+                                while True:
+                                    _batch = (sb().table("assets")
+                                              .select("symbol,sub_class")
+                                              .eq("asset_class","Equity")
+                                              .range(_pg*1000, (_pg+1)*1000-1)
+                                              .execute().data or [])
+                                    all_eq.extend(_batch)
+                                    if len(_batch) < 1000: break
+                                    _pg += 1
+                            except Exception as fe:
+                                st.error(f"Could not fetch assets: {fe}")
+                                st.stop()
+
+                            # ── Step 2: build full update map ─────────────
+                            # Rule 1 — symbol exactly in cap file → use file value
+                            # Rule 2 — symbol NOT in cap file but currently Large/Mid → demote to Small Cap
+                            # Rule 3 — already Small Cap and not in cap file → leave unchanged
+                            update_map = {}
+                            for asset in all_eq:
+                                sym     = asset["symbol"]
+                                current = asset.get("sub_class","")
+                                if sym in caps_to_apply:
+                                    new_cap = caps_to_apply[sym]
+                                elif current in ("Large Cap","Mid Cap"):
+                                    # Previously misclassified — not in cap file → Small Cap
+                                    new_cap = "Small Cap"
+                                else:
+                                    continue
+                                if new_cap != current:
+                                    update_map[sym] = new_cap
+
+                            demoted  = sum(1 for s, c in update_map.items()
+                                          if c == "Small Cap" and s not in caps_to_apply)
+                            assigned = len(update_map) - demoted
+
+                            status_m.markdown(
+                                f'<div style="font-size:.78rem;color:#C8D0E0">'
+                                f'📋 {len(all_eq)} equities scanned — '
+                                f'<b>{assigned}</b> to classify from file, '
+                                f'<b>{demoted}</b> to demote to Small Cap'
+                                f'</div>', unsafe_allow_html=True
+                            )
+
+                            # ── Step 3: apply updates in batches ──────────
+                            items = list(update_map.items())
+                            ok = err = 0
+                            BATCH = 100
                             for i in range(0, len(items), BATCH):
                                 chunk = items[i:i+BATCH]
                                 for sym, cap in chunk:
@@ -345,23 +405,32 @@ def render():
                                         ok += 1
                                     except Exception:
                                         err += 1
-                                frac = min((i+BATCH)/len(items), 1.0)
+                                frac = min((i+BATCH)/max(len(items),1), 1.0)
                                 prog_m.progress(frac,
                                     text=f"Updated {min(i+BATCH,len(items))}/{len(items)} stocks…")
                                 status_m.markdown(
                                     f'<div style="font-size:.78rem;color:#C8D0E0">'
-                                    f'✓ {ok} updated &nbsp; {"⚠ " + str(err) + " errors" if err else ""}'
+                                    f'✓ {ok} updated &nbsp; '
+                                    f'({demoted} demoted to Small Cap) &nbsp; '
+                                    f'{"⚠ " + str(err) + " errors" if err else ""}'
                                     f'</div>', unsafe_allow_html=True)
+
                             prog_m.progress(1.0, text="Done ✓")
                             clear_market_cache()
-                            st.success(f"✅ {ok} stocks classified. "
-                                       f"{f'{err} errors.' if err else ''}")
+                            st.success(
+                                f"✅ {ok} stocks reclassified — "
+                                f"{assigned} from cap file, "
+                                f"{demoted} demoted to Small Cap. "
+                                f"{f'{err} errors.' if err else ''}"
+                            )
                             st.session_state.pop("_manual_caps", None)
                     else:
                         st.warning("No valid cap values found. Ensure 'cap' column has 'Large Cap'/'Mid Cap'/'Small Cap'.")
                 else:
-                    st.error("Need columns: 'symbol' + ('cap' or 'rank'). "
-                             f"Found: {list(cap_df.columns)}")
+                    st.error(
+                        f"Need columns: 'symbol' + ('cap' or 'rank'). "
+                        f"Found: {list(cap_df.columns)}"
+                    )
             except Exception as e:
                 st.error(f"File error: {e}")
 

@@ -146,12 +146,14 @@ def render():
     with tab1:
         st.markdown("#### Equity Prices")
         _hint(
-            "<b>Symbol:</b> <code>symbol, sc_code, trading_symbol, ticker</code><br>"
-            "<b>Close/LTP:</b> <code>close, ltp, last_price, closeprice</code><br>"
-            "<b>Open/High/Low:</b> <code>open, high, low</code> &nbsp;"
-            "<b>Prev Close:</b> <code>prev_close, prevclose</code><br>"
-            "<b>Volume:</b> <code>volume, tottrdqty</code> &nbsp;"
-            "<b>Company name (optional):</b> <code>name, company_name, sc_name</code>"
+            "<b>Symbol:</b> <code>SYMBOL, sc_code, trading_symbol, ticker</code><br>"
+            "<b>Series filter:</b> <code>SERIES</code> column — only <code>EQ</code> rows are loaded<br>"
+            "<b>Date:</b> <code>DATE1</code> (auto-detected from file) or pick below<br>"
+            "<b>Close:</b> <code>CLOSE_PRICE, close, ltp</code> &nbsp;"
+            "<b>Open:</b> <code>OPEN_PRICE, open</code> &nbsp;"
+            "<b>Avg:</b> <code>AVG_PRICE, avg_price</code><br>"
+            "<b>Prev Close:</b> <code>prev_close, prevclose</code> &nbsp;"
+            "<b>Volume:</b> <code>volume, tottrdqty</code>"
         )
         eq_date = _date_pick("eq_date")
         eq_file = st.file_uploader("CSV / Excel", type=["csv","xlsx","xls"], key="eq_up")
@@ -160,41 +162,85 @@ def render():
             df, err = _read(eq_file)
             if err: st.error(err)
             else:
-                df    = _norm(df)
+                df = _norm(df)
+
+                # ── SERIES filter: keep only EQ rows (case-flexible) ──────
+                # Look for the series column regardless of case/spacing
+                series_col = next(
+                    (c for c in df.columns if c.strip().lower().replace(" ","_") == "series"),
+                    None
+                )
+                if series_col is not None:
+                    before = len(df)
+                    df = df[df[series_col].astype(str).str.strip().str.upper() == "EQ"].copy()
+                    df = df.reset_index(drop=True)
+                    filtered_msg = f"Series filter: {before:,} → {len(df):,} EQ rows"
+                else:
+                    filtered_msg = "No SERIES column found — all rows used"
+
+                # ── DATE1: auto-detect trade date from file ───────────────
+                date1_col = next(
+                    (c for c in df.columns if c.strip().lower().replace(" ","_") in ("date1","date_1","trade_date","trddate")),
+                    None
+                )
+                auto_date = None
+                if date1_col is not None and len(df) > 0:
+                    try:
+                        raw_date = str(df[date1_col].iloc[0]).strip()
+                        for fmt in ("%d-%b-%Y", "%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d-%b-%y"):
+                            try:
+                                from datetime import datetime as _dt
+                                auto_date = _dt.strptime(raw_date, fmt).date()
+                                break
+                            except ValueError:
+                                continue
+                    except Exception:
+                        pass
+                if auto_date:
+                    st.info(f"📅 DATE1 detected: **{auto_date}** — overrides date picker below")
+                    pd_s = str(auto_date)
+                else:
+                    pd_s = str(eq_date)
+
                 sym_c = _col(df,"symbol","sc_code","trading_symbol","ticker")
-                cl_c  = _col(df,"close","ltp","last_price","closing_price","close_price","closeprice")
+                # CLOSE_PRICE first, then fallbacks
+                cl_c  = _col(df,"close_price","close","ltp","last_price","closing_price","closeprice")
 
                 if sym_c is None or cl_c is None:
-                    st.error("❌ Symbol or close/LTP column not found.")
+                    st.error("❌ Symbol or close price column not found.")
                 else:
-                    st.caption(f"{len(df):,} rows detected")
+                    st.caption(f"{filtered_msg} · {len(df):,} rows ready · date: {pd_s}")
                     st.dataframe(df.head(5), use_container_width=True)
 
                     if st.button("⬆️ Upload", use_container_width=True, key="do_eq"):
                         now   = datetime.now().isoformat()
-                        pd_s  = str(eq_date)
-                        o_c   = _col(df,"open","open_price","openprice")
-                        h_c   = _col(df,"high","high_price","highprice")
-                        lo_c  = _col(df,"low","low_price","lowprice")
-                        pc_c  = _col(df,"prev_close","previous_close","prevclose")
-                        vol_c = _col(df,"volume","total_traded_qty","tottrdqty")
+                        # OPEN_PRICE, AVG_PRICE, then standard fallbacks
+                        o_c   = _col(df,"open_price","open","openprice")
+                        avg_c = _col(df,"avg_price","average_price","avgprice","avg")
+                        h_c   = _col(df,"high_price","high","highprice")
+                        lo_c  = _col(df,"low_price","low","lowprice")
+                        pc_c  = _col(df,"prev_close","previous_close","prevclose","prcls")
+                        vol_c = _col(df,"volume","total_traded_qty","tottrdqty","ttlq")
                         nm_c  = _col(df,"name","company_name","sc_name","isin_name")
 
                         price_rows = []
                         asset_rows = []
+                        chg_col = _col(df,"change_pct","pchange")
                         for i in range(len(df)):
                             sym = str(sym_c.iloc[i]).strip().upper()
                             cl  = _f(cl_c.iloc[i])
                             if not sym or sym in ("NAN","SYMBOL","") or cl <= 0: continue
                             pc  = _f(pc_c.iloc[i], cl) if pc_c is not None else cl
-                            chg = _f(_col(df,"change_pct","pchange").iloc[i] if _col(df,"change_pct","pchange") is not None else "0")
+                            chg = _f(chg_col.iloc[i] if chg_col is not None else "0")
                             if chg == 0 and pc: chg = round((cl-pc)/pc*100, 4)
                             price_rows.append({
                                 "symbol":sym,"price_date":pd_s,
                                 "open":  _f(o_c.iloc[i],  cl) if o_c  is not None else cl,
                                 "high":  _f(h_c.iloc[i],  cl) if h_c  is not None else cl,
                                 "low":   _f(lo_c.iloc[i], cl) if lo_c is not None else cl,
-                                "close":cl,"prev_close":pc,"change_pct":round(chg,4),
+                                "close": cl,
+                                "avg_price": _f(avg_c.iloc[i], cl) if avg_c is not None else cl,
+                                "prev_close":pc,"change_pct":round(chg,4),
                                 "volume":_i(vol_c.iloc[i]) if vol_c is not None else 0,
                                 "last_updated":now,
                             })
