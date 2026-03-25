@@ -152,5 +152,6 @@ def render():
                         st.session_state.pop(confirm_key, None); st.rerun()
             else:
                 st.info("No price rows found in this date range.")
+    st.markdown("<br>", unsafe_allow_html=True)
     back_button(fallback="profile", label="← Back", key="bot")
 

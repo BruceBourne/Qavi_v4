@@ -573,6 +573,10 @@ def render():
     """, unsafe_allow_html=True)
 
 
+    if st.button("← Back to Profile"):
+        navigate("profile")
+
+
 def _flush(batch):
     ok = err = 0
     for sym, upd in batch:
@@ -582,5 +586,4 @@ def _flush(batch):
         except Exception:
             err += 1
     return ok, err
-    back_button(fallback="profile", label="← Back", key="bot")
 

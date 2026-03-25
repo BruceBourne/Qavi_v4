@@ -5,6 +5,8 @@ from utils.session import navigate, back_button
 from utils.db import sb, clear_market_cache, get_all_advisors, delete_user_account, decrypt_user
 from utils.crypto import fmt_date, title_case, indian_format
 from datetime import datetime, timezone, timedelta
+from zoneinfo import ZoneInfo
+_IST = ZoneInfo("Asia/Kolkata")
 from collections import defaultdict
 
 def _is_owner():
@@ -41,7 +43,7 @@ def _get_table_count(tbl):
 
 def _get_platform_stats(all_users):
     """Derive activity stats from users + DB counts."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(_IST)
 
     total        = len(all_users)
     active_count = sum(1 for u in all_users if u.get("is_active", True))
@@ -62,7 +64,7 @@ def _get_platform_stats(all_users):
         ll = u.get("last_login")
         if ll:
             try:
-                dt = datetime.fromisoformat(ll.replace("Z", "+00:00"))
+                dt = datetime.fromisoformat(ll.replace("Z", "+00:00")).astimezone(_IST)
                 hour_counts[dt.hour] += 1
             except Exception:
                 pass
@@ -122,8 +124,7 @@ def render():
 
     user = st.session_state.user
     st.markdown('<div class="page-title">👑 Owner Dashboard</div>', unsafe_allow_html=True)
-    st.markdown('<div class="page-sub\">Platform administration · Activity · Users · Data · Config</div>',
-                unsafe_allow_html=True)
+    st.markdown('<div class="page-sub">Platform administration · Activity · Users · Data · Config</div>', unsafe_allow_html=True)
 
     tabs = st.tabs(["  📊 Activity  ", "  👥 Users  ", "  💬 Feedback  ",
                     "  🗄 Data Tools  ", "  ⚙️ Platform  "])
@@ -153,19 +154,19 @@ def render():
         c4.markdown(_metric("New This Month", stats["new_this_month"],
                              f"{stats['active']} accounts active", "#F5B731"), unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("")
         c5, c6, c7, c8 = st.columns(4)
         c5.markdown(_metric("Stocks in DB",  f"{assets_n:,}"),    unsafe_allow_html=True)
         c6.markdown(_metric("Price Records", f"{prices_n:,}"),    unsafe_allow_html=True)
         c7.markdown(_metric("Invoices",      f"{invoices_n:,}"),  unsafe_allow_html=True)
         c8.markdown(_metric("Open Feedback", f"{feedback_n:,}"),  unsafe_allow_html=True)
 
-        st.markdown("<br>", unsafe_allow_html=True)
+        st.markdown("")
         left, right = st.columns(2)
 
         # Preferred login time — hour distribution
         with left:
-            st.markdown("**Preferred Login Hours** *(UTC)*")
+            st.markdown("**Preferred Login Hours** *(IST)*")
             hc = stats["hour_counts"]
             if hc:
                 max_h = max(hc.values()) if hc else 1
@@ -207,7 +208,7 @@ def render():
                 st.info("No growth data yet.")
 
         # Role breakdown
-        st.markdown("<br>**User Roles**")
+        st.markdown("**User Roles**")
         rc = stats["roles"]
         ROLE_COLORS = {"owner": "#E84142", "advisor": "#4F7EFF", "client": "#2ECC7A"}
         max_r = max(rc.values()) if rc else 1
@@ -222,7 +223,7 @@ def render():
         st.markdown('</div>', unsafe_allow_html=True)
 
         # Quick links
-        st.markdown("<br>")
+        st.markdown("")
         b1, b2, b3, b4 = st.columns(4)
         if b1.button("📊 Market Upload",   use_container_width=True): navigate("market_upload")
         if b2.button("🔍 Stock Enrichment", use_container_width=True): navigate("stock_enrichment")
@@ -290,7 +291,7 @@ def render():
                             f"<div style='font-size:.84rem'>{u['dob']}</div>",
                             unsafe_allow_html=True)
 
-                st.markdown("<br>", unsafe_allow_html=True)
+                st.markdown("")
 
                 # Actions row
                 if u["id"] != user["id"]:
@@ -456,11 +457,15 @@ def render():
             st.code(h, language=None)
             st.caption("Copy this into ADVISOR_KEY_HASH or OWNER_KEY_HASH in Streamlit secrets.")
 
-        st.markdown("<br>**Note on `last_login` column:**")
-        st.caption(
-            "The Activity tab tracks login times using a `last_login` column on the `users` table. "
-            "If you haven't added it yet, run this in your Supabase SQL Editor:"
+        st.markdown("")
+        st.markdown("#### Supabase RLS Notice")
+        st.info(
+            "If Supabase flags **rls_disabled_in_public** on your tables, enable Row Level Security "
+            "on each table in your Supabase dashboard: **Table Editor → [table] → RLS → Enable**. "
+            "Then add a policy allowing authenticated users to read/write their own rows. "
+            "This is a Supabase project setting — no changes are needed in this app."
         )
-        st.code("ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login TIMESTAMPTZ;", language="sql")
 
+
+    st.markdown("<br>", unsafe_allow_html=True)
     back_button(fallback="profile", label="← Back", key="bot")
