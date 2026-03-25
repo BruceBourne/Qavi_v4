@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import sb, clear_market_cache
 from utils.crypto import fmt_date, indian_format
 from datetime import date, timedelta
@@ -9,6 +9,7 @@ from datetime import date, timedelta
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+    back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Data Management</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-sub">Storage, historical data cleanup, row counts</div>', unsafe_allow_html=True)
@@ -150,3 +151,4 @@ def render():
                         st.session_state.pop(confirm_key, None); st.rerun()
             else:
                 st.info("No price rows found in this date range.")
+    back_button(fallback="profile", label="← Back", key="bot")

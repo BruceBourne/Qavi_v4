@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import sb, clear_market_cache
 from datetime import datetime, date
 import time, requests
@@ -237,6 +237,7 @@ def _fetch_sector_yf(symbol):
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+    back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Stock Enrichment</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-sub">Update company names · SEBI cap classification · Sectors</div>',
@@ -570,8 +571,6 @@ def render():
     </div>
     """, unsafe_allow_html=True)
 
-    if st.button("← Back to Profile"):
-        navigate("profile")
 
 def _flush(batch):
     ok = err = 0
@@ -582,3 +581,4 @@ def _flush(batch):
         except Exception:
             err += 1
     return ok, err
+    back_button(fallback="profile", label="← Back", key="bot")

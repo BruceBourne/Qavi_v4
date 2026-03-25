@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import (get_client_advisors, get_advisor_clients, get_portfolios_for_ac,
                       get_private_portfolios, get_portfolio_holdings, get_transactions,
                       get_portfolio_by_id, add_holding, remove_holding,
@@ -80,6 +80,7 @@ def _collect_portfolios(user):
 def render():
     if not st.session_state.get("user"):
         navigate("login"); return
+    back_button(fallback="portfolios", key="top")
     user = st.session_state.user
 
     pfs = _collect_portfolios(user)
@@ -395,3 +396,4 @@ def render():
                 st.markdown(f"**Status:** <span style='color:{sc}'>{pa['status'].upper()}</span><br>"
                             f"**Submitted:** {fmt_date(str(pa.get('submitted_at',''))[:10])}",
                             unsafe_allow_html=True)
+    back_button(fallback="portfolios", label="← Back", key="bot")

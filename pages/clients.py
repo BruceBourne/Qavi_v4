@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import (get_advisor_clients, create_advisor_client, update_advisor_client,
                       delete_advisor_client, link_registered_client)
 from utils.crypto import fmt_date, title_case
@@ -13,6 +13,7 @@ RISK_OPTS = ["Conservative", "Moderate", "Aggressive"]
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+    back_button(fallback="profile", key="top")
     user = st.session_state.user
     clients = get_advisor_clients(user["id"])
 
@@ -120,3 +121,4 @@ def render():
                     ok, msg = link_registered_client(user["id"], lu.strip())
                     if ok: st.success(msg); st.rerun()
                     else: st.error(msg)
+    back_button(fallback="profile", label="← Back", key="bot")

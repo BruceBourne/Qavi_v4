@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import sb, clear_market_cache, get_all_advisors
 from utils.crypto import fmt_date, title_case, indian_format
 from datetime import datetime
@@ -41,6 +41,7 @@ def _get_stats():
 def render():
     if not _is_owner():
         navigate("login"); return
+    back_button(fallback="profile", key="top")
 
     user = st.session_state.user
     st.markdown('<div class="page-title">👑 Owner Dashboard</div>', unsafe_allow_html=True)
@@ -242,3 +243,4 @@ def render():
             h = hashlib.sha256(raw_key.encode()).hexdigest()
             st.code(h, language=None)
             st.caption("Copy this into ADVISOR_KEY_HASH or OWNER_KEY_HASH in Streamlit secrets.")
+    back_button(fallback="profile", label="← Back", key="bot")

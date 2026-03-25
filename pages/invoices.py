@@ -7,7 +7,7 @@ from utils.db import (get_advisor_clients, get_advisor_client, get_invoices_for_
                       get_user_by_id, sb, decrypt_user, get_fixed_income,
                       rpc_calc_invoice)
 from utils.crypto import inr, indian_format, fmt_date, title_case
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.market import is_market_open
 from datetime import date, timedelta
 import base64
@@ -454,6 +454,7 @@ table.ht tr:nth-child(even) {{ background:#f8fafc; }}
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+    back_button(fallback="profile", key="top")
 
     user     = st.session_state.user
     advisor  = get_user_by_id(user["id"])
@@ -727,3 +728,4 @@ def render():
                         st.error(f"Error: {e}")
         else:
             st.info("Configure fee above then click **Calculate Fee** before generating.")
+    back_button(fallback="profile", label="← Back", key="bot")

@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import get_advisor_clients, get_portfolios_for_ac, get_portfolio_holdings, get_all_prices_map, get_invoices_for_advisor
 from utils.crypto import inr, indian_format
 from collections import defaultdict
@@ -24,6 +24,7 @@ def _bar(label, val, max_val, color):
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+    back_button(fallback="profile", key="top")
     user = st.session_state.user
     clients  = get_advisor_clients(user["id"])
     invoices = get_invoices_for_advisor(user["id"])
@@ -151,3 +152,4 @@ def render():
             for name,v in sorted(by_client.items(), key=lambda x:-x[1]):
                 st.markdown(_bar(name, v, mv, "#4F7EFF"), unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
+    back_button(fallback="profile", label="← Back", key="bot")

@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import (get_advisor_clients, get_meetings_for_advisor, get_meetings_for_client,
                       create_meeting, update_meeting_status, get_pending_requests_for_advisor,
                       approve_meeting_request, reject_meeting_request,
@@ -32,6 +32,7 @@ def _status_badge(status):
 def render():
     if not st.session_state.get("user"):
         navigate("login"); return
+    back_button(fallback="dashboard", key="top")
     user = st.session_state.user
     role = user["role"]
 
@@ -179,3 +180,4 @@ def render():
                     else:
                         create_meeting_request(adv_sel, user["id"], str(pref_date), pref_time, message)
                         st.success("Request sent! Your advisor will confirm shortly.")
+    back_button(fallback="dashboard", label="← Back", key="bot")

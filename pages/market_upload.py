@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import sb, clear_market_cache
 from datetime import date, datetime
 import pandas as pd
@@ -107,6 +107,7 @@ def _upsert_batched(rows, table, conflict, prog_start, prog_end, prog_bar, label
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+    back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Market Data Upload</div>', unsafe_allow_html=True)
 
@@ -559,5 +560,4 @@ def render():
                     st.success(f"✅ {count} bond prices updated.")
 
     st.markdown("---")
-    if st.button("← Back"):
-        navigate("profile")
+    back_button(fallback="profile", label="← Back", key="bot")

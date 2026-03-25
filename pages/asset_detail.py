@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import get_asset_info, get_asset_price, get_price_history, get_mf_by_symbol
 from utils.crypto import inr, indian_format, fmt_date
 from utils.market import fetch_mf_history, MF_SCHEME_CODES
@@ -30,6 +30,7 @@ def _returns_table(history, current_price):
     return result
 
 def render():
+    back_button(fallback="market_equities", key="top")
     symbol = st.session_state.get("selected_symbol")
     if not symbol:
         st.warning("No asset selected.")
@@ -44,7 +45,6 @@ def render():
 
     st.markdown(f'<div class="page-title">{symbol}</div>', unsafe_allow_html=True)
     st.markdown(f'<div class="page-sub">{name}</div>', unsafe_allow_html=True)
-    if st.button("← Back to Analysis"): navigate("analysis")
 
     # Price header
     chg_c = "#2ECC7A" if chg >= 0 else "#FF5A5A"
@@ -202,3 +202,4 @@ def render():
             st.markdown(f'<div style="display:flex;justify-content:space-between;padding:.5rem 0;border-bottom:1px solid #1E2535"><span style="font-size:.83rem;color:#8892AA">{label}</span><span style="font-size:.88rem;color:{color};font-weight:600">{val}</span></div>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         st.caption("Sharpe ratio uses 7% annual risk-free rate. Beta calculation requires benchmark history — coming soon.")
+    back_button(fallback="market_equities", label="← Back", key="bot")

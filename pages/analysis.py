@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import (get_advisor_clients, get_client_advisors, get_portfolios_for_ac,
                       get_private_portfolios, get_portfolio_holdings, get_all_prices_map,
                       get_price_history, get_indices, get_assets_map)
@@ -160,6 +160,7 @@ def _metric_card(label, value, sub=None, color="#F0F4FF"):
 def render():
     if not st.session_state.get("user"):
         navigate("login"); return
+    back_button(fallback="dashboard", key="top")
     user    = st.session_state.user
     role    = user["role"]
     indices = get_indices()
@@ -890,3 +891,4 @@ def render():
                 st.caption("Bottom 5 performing assets")
                 st.dataframe(bottom5[["Symbol","Portfolio","Asset Class","Return %"]]
                              .reset_index(drop=True), use_container_width=True)
+    back_button(fallback="dashboard", label="← Back", key="bot")

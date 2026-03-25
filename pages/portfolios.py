@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import (get_advisor_clients, get_client_advisors, get_portfolios_for_ac,
                       get_private_portfolios, get_portfolio_holdings, get_all_prices_map,
                       rpc_portfolio_summary, create_portfolio, update_portfolio, delete_portfolio)
@@ -119,6 +119,7 @@ def _new_pf_form(ac_id, owner_id, owner_type, vis_opts, key_sfx):
 def render():
     if not st.session_state.get("user"):
         navigate("login"); return
+    back_button(fallback="dashboard", key="top")
     user = st.session_state.user
     role = user["role"]
     st.markdown('<div class="page-title">Portfolios</div>', unsafe_allow_html=True)
@@ -174,3 +175,4 @@ def render():
                 ac_sel = None
                 st.info("You have no linked advisor yet — portfolio will be fully private.")
             _new_pf_form(ac_sel, user["id"], "client", ["private"], "cli")
+    back_button(fallback="dashboard", label="← Back", key="bot")

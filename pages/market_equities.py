@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import get_assets, get_all_prices_map
 from utils.crypto import indian_format
 from collections import defaultdict
@@ -35,6 +35,7 @@ def _row(a, prices, key_sfx):
 
 def render():
     st.markdown('<div class="page-title">Equities</div>', unsafe_allow_html=True)
+    back_button(fallback="dashboard", key="top")
 
     b1, b2, b3, b4, b5 = st.columns(5)
     if b1.button("Equities",         use_container_width=True): pass
@@ -109,3 +110,4 @@ def render():
                 if pc3.button("Next →", key=f"next_{sub}", disabled=(cur_page>=n_pages-1),
                               use_container_width=True):
                     st.session_state[page_key] = cur_page + 1; st.rerun()
+    back_button(fallback="dashboard", label="← Back", key="bot")

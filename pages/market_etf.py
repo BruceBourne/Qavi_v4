@@ -1,13 +1,14 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import get_assets, get_all_prices_map
 from utils.crypto import indian_format
 from collections import defaultdict
 
 def render():
     st.markdown('<div class="page-title">ETFs</div>', unsafe_allow_html=True)
+    back_button(fallback="market_equities", key="top")
     st.markdown('<div class="page-sub">Exchange Traded Funds listed on NSE</div>', unsafe_allow_html=True)
 
     b1,b2,b3,b4,b5 = st.columns(5)
@@ -43,3 +44,4 @@ def render():
                 if hc[6].button("→", key=f"etfdet_{a['symbol']}"):
                     st.session_state.selected_symbol = a["symbol"]; navigate("asset_detail")
                 st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
+    back_button(fallback="market_equities", label="← Back", key="bot")

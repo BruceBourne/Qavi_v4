@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import sb
 from utils.crypto import title_case
 from datetime import datetime
@@ -33,6 +33,7 @@ def render():
     user = st.session_state.get("user")
 
     st.markdown('<div class="page-title">Feedback & Support</div>', unsafe_allow_html=True)
+    back_button(fallback="profile", key="top")
     st.markdown('<div class="page-sub">Report issues, bugs, or share suggestions</div>',
                 unsafe_allow_html=True)
 
@@ -99,5 +100,4 @@ def render():
                 st.error(f"Could not submit feedback: {e}")
 
     st.markdown("")
-    if st.button("← Back", use_container_width=False):
-        navigate("dashboard" if user else "home")
+    back_button(fallback="profile", label="← Back", key="bot")
