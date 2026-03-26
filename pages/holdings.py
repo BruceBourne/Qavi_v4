@@ -264,30 +264,99 @@ def render():
                     else:
                         interest_rate = None
 
-                    # ── SIP for Mutual Fund ────────────────────────────────
-                    sip_mode=False; sip_frequency=None; sip_amount_val=0.0; sip_start=None
+                    # ── Mutual Fund: Investment & Benefit Options ──────────
+                    sip_mode       = False
+                    sip_frequency  = None
+                    sip_amount_val = 0.0
+                    sip_start      = None
+                    mf_benefit     = "Growth"
+                    mf_idcw_freq   = ""
+                    mf_idcw_method = "Payout"
+                    mf_plan        = "Direct"
+
                     if ac == "Mutual Fund":
-                        inv_type = st.radio("Investment Type",
-                                            ["Lump Sum","SIP (Systematic Investment Plan)"],
-                                            horizontal=True, key="mf_inv_type")
-                        sip_mode = (inv_type == "SIP (Systematic Investment Plan)")
+                        st.markdown("""
+                        <div style="font-size:.75rem;color:#8892AA;margin-bottom:.4rem;line-height:1.7">
+                        <b style="color:#C8D0E0">Investment &amp; Benefit settings</b><br>
+                        These are <em>your preference</em> for how you invest and receive returns.
+                        The underlying fund NAV and performance data is shared across all plan types.
+                        </div>""", unsafe_allow_html=True)
+
+                        pa1, pa2 = st.columns(2)
+                        # Investment type: how the client pays
+                        inv_type = pa1.radio(
+                            "How you invest",
+                            ["Lump Sum", "SIP (Systematic Investment Plan)",
+                             "SWP (Systematic Withdrawal)", "STP (Transfer)"],
+                            horizontal=False, key="mf_inv_type"
+                        )
+                        sip_mode = inv_type in (
+                            "SIP (Systematic Investment Plan)",
+                            "SWP (Systematic Withdrawal)",
+                            "STP (Transfer)"
+                        )
+
+                        # Benefit / payout preference: how the client receives returns
+                        mf_benefit = pa2.radio(
+                            "Benefit option",
+                            ["Growth", "IDCW (Income Distribution)"],
+                            horizontal=False, key="mf_benefit_opt",
+                            help=("Growth: NAV grows — no payouts, best for long-term wealth.\n"
+                                  "IDCW: Periodic income distributed — suitable for income needs.")
+                        )
+                        mf_benefit = "IDCW" if "IDCW" in mf_benefit else "Growth"
+
+                        # Plan type
+                        mf_plan = st.radio(
+                            "Plan type",
+                            ["Direct", "Regular"],
+                            horizontal=True, key="mf_plan_type",
+                            help="Direct: lower expense ratio, higher returns. Regular: through distributor."
+                        )
+
                         if sip_mode:
-                            s1,s2 = st.columns(2)
-                            sip_frequency  = s1.selectbox("Frequency",
-                                                          ["Daily","Weekly","Monthly","Quarterly","Annual"], index=2)
-                            sip_amount_val = s2.number_input("SIP Amount (₹)", min_value=100.0, step=500.0, value=1000.0)
-                            sip_start      = st.date_input("SIP Start Date")
-                            st.caption("Enter total units accumulated and weighted average NAV below.")
+                            st.markdown('<div style="font-size:.78rem;color:#C8D0E0;margin:.3rem 0 .2rem"><b>SIP / SWP / STP Settings</b></div>', unsafe_allow_html=True)
+                            s1, s2, s3 = st.columns(3)
+                            sip_frequency  = s1.selectbox(
+                                "Payment frequency",
+                                ["Daily","Weekly","Fortnightly","Monthly",
+                                 "Quarterly","Half-Yearly","Annual"],
+                                index=3,   # Monthly default
+                                key="mf_sip_freq"
+                            )
+                            sip_amount_val = s2.number_input(
+                                "Amount per instalment (₹)",
+                                min_value=100.0, step=500.0, value=5000.0,
+                                key="mf_sip_amt"
+                            )
+                            sip_start = s3.date_input("Start date", key="mf_sip_start")
+                            st.caption("Enter total units accumulated so far + weighted average NAV below.")
+
+                        if mf_benefit == "IDCW":
+                            st.markdown('<div style="font-size:.78rem;color:#C8D0E0;margin:.3rem 0 .2rem"><b>IDCW Settings</b></div>', unsafe_allow_html=True)
+                            d1, d2 = st.columns(2)
+                            mf_idcw_freq = d1.selectbox(
+                                "IDCW payout frequency",
+                                ["","Daily","Weekly","Fortnightly","Monthly",
+                                 "Quarterly","Half-Yearly","Annual","Flexi"],
+                                index=4,   # Monthly default for IDCW
+                                key="mf_idcw_freq",
+                                help="How often the fund distributes income."
+                            )
+                            mf_idcw_method = d2.selectbox(
+                                "IDCW method",
+                                ["Payout","Reinvestment","Transfer"],
+                                key="mf_idcw_method",
+                                help=("Payout: cash transferred to bank.\n"
+                                      "Reinvestment: used to buy more units.\n"
+                                      "Transfer: moved to another scheme.")
+                            )
 
                     # ── Quantity / Amount ─────────────────────────────────
-                    # Bank FD: utype=="amount" — ONE field: Amount Invested
-                    # Showing both a qty field AND a cost field for FD is wrong.
-                    # For FD: invested amount IS the "quantity", avg_cost = 1.0 (used as face value)
                     if utype == "amount":
-                        # Single field — only Amount Invested
-                        qty = st.number_input("Amount Invested (₹)",
-                                              min_value=100.0, step=1000.0, value=10000.0, format="%.2f")
-                        cost = 1.0   # stored as avg_cost = 1 so current_value = qty × 1 = amount
+                        qty  = st.number_input("Amount Invested (₹)",
+                                               min_value=100.0, step=1000.0, value=10000.0, format="%.2f")
+                        cost = 1.0
                     elif utype == "shares":
                         qty  = float(st.number_input("Quantity (shares)", min_value=1, step=1, value=1, format="%d"))
                         cost = st.number_input("Buy Price (₹)", min_value=0.01, step=1.0, format="%.2f")
@@ -296,8 +365,9 @@ def render():
                         cost = st.number_input("Price per gram (₹)", min_value=0.01, step=1.0, format="%.2f")
                     else:
                         # units — MF, ETF, Bond
-                        label_qty  = "Total Units Accumulated" if sip_mode else "Units"
-                        label_cost = "Average NAV (₹)" if ac=="Mutual Fund" else "Buy Price / NAV (₹)"
+                        label_qty  = ("Total units accumulated" if sip_mode
+                                      else "Units purchased")
+                        label_cost = "Average NAV (₹)" if ac == "Mutual Fund" else "Buy Price / NAV (₹)"
                         qty  = st.number_input(label_qty,  min_value=0.001, step=0.001, format="%.3f")
                         cost = st.number_input(label_cost, min_value=0.01,  step=1.0,   format="%.2f")
 
@@ -307,28 +377,61 @@ def render():
                         if qty <= 0: st.error("Quantity must be > 0.")
                         elif utype != "amount" and cost <= 0: st.error("Price must be > 0.")
                         else:
-                            note_str = notes
+                            # Build notes string with all MF metadata
+                            note_parts = []
                             if interest_rate and interest_rate > 0:
-                                note_str = f"rate:{interest_rate:.2f}%" + (f" | {notes}" if notes else "")
-                            if sip_mode and sip_frequency:
-                                note_str = f"sip:{sip_frequency.lower()}:₹{sip_amount_val:g}" + (f" | {notes}" if notes else "")
+                                note_parts.append(f"rate:{interest_rate:.2f}%")
+                            if ac == "Mutual Fund":
+                                note_parts.append(f"plan:{mf_plan}")
+                                note_parts.append(f"benefit:{mf_benefit}")
+                                if mf_benefit == "IDCW" and mf_idcw_freq:
+                                    note_parts.append(f"idcw_freq:{mf_idcw_freq}")
+                                    note_parts.append(f"idcw_method:{mf_idcw_method}")
+                                if sip_mode and sip_frequency:
+                                    note_parts.append(f"inv:{inv_type.split()[0].lower()}")
+                                    note_parts.append(f"freq:{sip_frequency.lower()}")
+                                    note_parts.append(f"amt:₹{sip_amount_val:g}")
+                            if notes: note_parts.append(notes)
+                            note_str = " | ".join(note_parts)
+
+                            # Determine investment type
+                            if ac == "Mutual Fund":
+                                if "SIP" in inv_type:      inv_key = "sip"
+                                elif "SWP" in inv_type:    inv_key = "swp"
+                                elif "STP" in inv_type:    inv_key = "stp"
+                                else:                      inv_key = "lump_sum"
+                            else:
+                                inv_key = "lump_sum"
+
                             sub = next((d.get("sub_class","") for d in get_assets(ac)
                                         if d["symbol"]==symbol), sub_opts[0]) or sub_opts[0]
                             sb().table("holdings").insert({
-                                "portfolio_id":pf_id,"symbol":symbol,"asset_class":ac,"sub_class":sub,
-                                "quantity":float(qty),"unit_type":utype,"avg_cost":cost,
-                                "notes":note_str,"is_manual":False,"investment_type":"sip" if sip_mode else "lump_sum",
-                                "sip_frequency":sip_frequency.lower() if sip_mode and sip_frequency else None,
-                                "sip_amount":sip_amount_val if sip_mode else 0,
-                                "sip_start_date":str(sip_start) if sip_mode and sip_start else None,
+                                "portfolio_id":   pf_id,
+                                "symbol":         symbol,
+                                "asset_class":    ac,
+                                "sub_class":      sub,
+                                "quantity":       float(qty),
+                                "unit_type":      utype,
+                                "avg_cost":       cost,
+                                "notes":          note_str,
+                                "is_manual":      False,
+                                "investment_type":inv_key,
+                                "sip_frequency":  sip_frequency.lower() if sip_mode and sip_frequency else None,
+                                "sip_amount":     sip_amount_val if sip_mode else 0,
+                                "sip_start_date": str(sip_start) if sip_mode and sip_start else None,
                             }).execute()
                             sb().table("transactions").insert({
-                                "portfolio_id":pf_id,"symbol":symbol,
-                                "txn_type":"SIP" if sip_mode else "BUY",
-                                "quantity":float(qty),"price":cost,"amount":float(qty)*cost,
-                                "txn_date":str(sip_start) if sip_mode and sip_start else str(date.today()),
+                                "portfolio_id": pf_id,
+                                "symbol":       symbol,
+                                "txn_type":     inv_key.upper() if inv_key != "lump_sum" else "BUY",
+                                "quantity":     float(qty),
+                                "price":        cost,
+                                "amount":       float(qty) * cost,
+                                "txn_date":     str(sip_start) if sip_mode and sip_start else str(date.today()),
                             }).execute()
-                            st.success(f"Added {'SIP — ' if sip_mode else ''}{qty:g} of {symbol}"); st.rerun()
+                            label = inv_type.split()[0] if sip_mode else ""
+                            st.success(f"Added {f'{label} — ' if label else ''}{qty:g} units of {symbol}")
+                            st.rerun()
 
     # ── MANUAL ENTRY ──────────────────────────────────────────────────────
     with tabs[3]:

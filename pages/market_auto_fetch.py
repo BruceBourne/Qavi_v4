@@ -155,6 +155,33 @@ def _is_regular_growth(name: str) -> bool:
     p = _parse_plan(name)
     return p["plan_type"] == "Regular" and p["benefit_option"] == "Growth"
 
+def _is_annual_compounding(name: str) -> bool:
+    """
+    True for funds that compound or distribute on an annual basis or longer.
+    Excludes Daily/Weekly/Fortnightly/Monthly/Quarterly/Half-Yearly IDCW —
+    these are income-distribution products, not long-term growth vehicles.
+    Includes:
+      • All Growth plans (NAV grows, no payouts — effectively annual compounding)
+      • Annual IDCW (distributes once a year — still long-term oriented)
+    Excludes Monthly, Quarterly, etc. IDCW variants.
+    """
+    p = _parse_plan(name)
+    if p["benefit_option"] == "Growth":
+        return True   # Growth always qualifies
+    if p["benefit_option"] == "IDCW":
+        freq = p["idcw_frequency"]
+        # Only Annual IDCW (or unspecified frequency Annual context) qualifies
+        if freq in ("Annual", "Flexi", ""):
+            # For empty frequency, only include if name explicitly says "annual"
+            # or has no frequency keyword at all (treated as annual)
+            n = name.lower()
+            sub_annual_kw = ("daily","weekly","fortnightly","monthly",
+                             "quarterly","half-yearly","halfyearly","bi-annual","biannual")
+            if not any(k in n for k in sub_annual_kw):
+                return True   # IDCW but no sub-annual keyword → include
+        return False
+    return False  # Bonus etc. excluded
+
 # ── HELPERS ───────────────────────────────────────────────────────────────
 def _get(url, timeout=15, headers=None, session=None):
     try:
@@ -610,11 +637,21 @@ def render():
                 — lowest TER, long-term wealth creation, one clean row per fund.
             </div>
             """, unsafe_allow_html=True)
+            st.markdown("""
+            <div style="background:#0F1117;border:1px solid #252D40;border-radius:7px;
+                padding:.6rem 1rem;margin-bottom:.5rem;font-size:.77rem;color:#C8D0E0">
+                <b>What "annual compounding" means here:</b> Growth plans (NAV grows, no payouts)
+                + Annual IDCW only. Excludes Monthly/Quarterly/Half-Yearly IDCW — those are
+                income-distribution products. All payment options are still available when
+                adding a fund to a portfolio in the Holdings page.
+            </div>
+            """, unsafe_allow_html=True)
             plan_filter = st.radio("Import plan variants", [
-                "Direct + Growth only (recommended)",
-                "Direct plans only (Growth + IDCW)",
+                "Annual compounding only — Growth + Annual IDCW (recommended)",
+                "Direct + Growth only",
+                "Direct plans only (Growth + Annual IDCW)",
                 "Growth plans only (Direct + Regular)",
-                "All variants (Direct/Regular × Growth/IDCW)",
+                "All variants (Direct/Regular × Growth/IDCW/All frequencies)",
             ], key="bl_plan", index=0)
 
             if st.button("📋 Load Active Scheme List", use_container_width=True, key="amfi_load"):
@@ -630,12 +667,20 @@ def render():
 
                 # Apply plan filter FIRST (most impactful, reduces list by ~75%)
                 _pf = plan_filter
-                if "Direct + Growth only" in _pf:
+                if "Annual compounding only" in _pf:
+                    # Growth plans (all) + Annual IDCW only — no sub-annual IDCW
+                    schemes = [s for s in schemes
+                               if _is_annual_compounding(s.get("schemeName",""))]
+                elif "Direct + Growth only" in _pf:
                     schemes = [s for s in schemes if _is_direct_growth(s.get("schemeName",""))]
                 elif "Direct plans only" in _pf:
-                    schemes = [s for s in schemes if "direct" in s.get("schemeName","").lower()]
+                    n_lo = lambda s: s.get("schemeName","").lower()
+                    schemes = [s for s in schemes
+                               if "direct" in n_lo(s) and _is_annual_compounding(s.get("schemeName",""))]
                 elif "Growth plans only" in _pf:
-                    schemes = [s for s in schemes if _is_direct_growth(s.get("schemeName","")) or _is_regular_growth(s.get("schemeName",""))]
+                    schemes = [s for s in schemes
+                               if _is_direct_growth(s.get("schemeName",""))
+                               or _is_regular_growth(s.get("schemeName",""))]
                 # else: All variants — no filter
 
                 if filt_house.strip():
