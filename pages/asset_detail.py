@@ -128,23 +128,62 @@ def render():
                     st.markdown(f'<div style="display:flex;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid #1E2535"><span style="font-size:.83rem;color:#8892AA">{label}</span><span style="font-size:.83rem;color:#F0F4FF;font-weight:500">{val}</span></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
         elif mf:
+            aum_v = mf.get("aum", 0)
+            aum_s = f"₹{indian_format(aum_v/1e7)} Cr" if aum_v and aum_v > 1e7 else (f"₹{indian_format(aum_v)}" if aum_v else "")
+            ter_v = mf.get("expense_ratio")
+            exit_v = mf.get("exit_load","")
+            r1y = mf.get("return_1y"); r3y = mf.get("return_3y"); r5y = mf.get("return_5y")
             fields = [
-                ("Fund Name",     mf.get("name","")),
-                ("Fund House",    mf.get("fund_house","")),
-                ("Category",      mf.get("category","")),
-                ("Sub-Category",  mf.get("sub_category","")),
-                ("Risk Level",    mf.get("risk_level","")),
-                ("NAV",          f"₹{indian_format(mf.get('nav',0))}"),
-                ("Prev NAV",     f"₹{indian_format(mf.get('prev_nav',0))}"),
-                ("Change",       f"{mf.get('change_pct',0):+.4f}%"),
-                ("Min Invest",   f"₹{indian_format(mf.get('min_investment',0))}"),
-                ("Scheme Code",   mf.get("scheme_code","")),
+                ("Fund Name",           mf.get("name","")),
+                ("Fund House / AMC",    mf.get("fund_house","")),
+                ("Fund Manager",        mf.get("fund_manager","")),
+                ("Category",            mf.get("category","")),
+                ("Sub-Category",        mf.get("sub_category","")),
+                ("Risk Level",          mf.get("risk_level","")),
+                ("NAV",                f"₹{indian_format(mf.get('nav',0))}"),
+                ("Prev NAV",           f"₹{indian_format(mf.get('prev_nav',0))}"),
+                ("Change",             f"{mf.get('change_pct',0):+.4f}%"),
+                ("AUM",                 aum_s),
+                ("Expense Ratio (TER)", f"{ter_v:.2f}%" if ter_v else ""),
+                ("Exit Load",           exit_v),
+                ("Min Investment",     f"₹{indian_format(mf.get('min_investment',0))}" if mf.get('min_investment') else ""),
+                ("Min Add. Investment",f"₹{indian_format(mf.get('min_additional_invest',0))}" if mf.get('min_additional_invest') else ""),
+                ("Lock-in Period",      mf.get("lock_in_period","")),
+                ("Launch Date",         mf.get("launch_date","")),
+                ("1Y Return",          f"{r1y:+.2f}%" if r1y is not None else ""),
+                ("3Y Return",          f"{r3y:+.2f}%" if r3y is not None else ""),
+                ("5Y Return",          f"{r5y:+.2f}%" if r5y is not None else ""),
+                ("Scheme Code",         mf.get("scheme_code","")),
             ]
             st.markdown('<div style="background:#161B27;border:1px solid #252D40;border-radius:12px;padding:1.2rem 1.4rem">', unsafe_allow_html=True)
             for label, val in fields:
                 if val:
                     st.markdown(f'<div style="display:flex;justify-content:space-between;padding:.45rem 0;border-bottom:1px solid #1E2535"><span style="font-size:.83rem;color:#8892AA">{label}</span><span style="font-size:.83rem;color:#F0F4FF;font-weight:500">{val}</span></div>', unsafe_allow_html=True)
             st.markdown('</div>', unsafe_allow_html=True)
+            # Top holdings
+            raw_hld = mf.get("top_holdings")
+            if raw_hld:
+                try:
+                    import json as _json
+                    holdings_list = _json.loads(raw_hld) if isinstance(raw_hld, str) else raw_hld
+                    if holdings_list:
+                        st.markdown("")
+                        st.markdown("**Top Holdings**")
+                        st.markdown('<div style="background:#161B27;border:1px solid #252D40;border-radius:12px;padding:1rem 1.4rem">', unsafe_allow_html=True)
+                        for h in holdings_list:
+                            pct = h.get("percentage", 0)
+                            bar_w = min(int(pct * 4), 100)
+                            st.markdown(
+                                f'<div style="display:flex;align-items:center;gap:.8rem;margin:.35rem 0">' 
+                                f'<div style="font-size:.8rem;color:#C8D0E0;min-width:180px">{h.get("company","")}</div>' 
+                                f'<div style="flex:1;background:#1A2030;border-radius:3px;height:8px;max-width:200px">' 
+                                f'<div style="width:{bar_w}%;background:#4F7EFF;height:8px;border-radius:3px"></div></div>' 
+                                f'<div style="font-size:.8rem;color:#4F7EFF;font-weight:600;min-width:44px">{pct:.1f}%</div>' 
+                                f'<div style="font-size:.74rem;color:#8892AA">{h.get("sector","")}</div></div>',
+                                unsafe_allow_html=True)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                except Exception:
+                    pass
         else:
             st.info("Detailed information not available for this asset.")
 

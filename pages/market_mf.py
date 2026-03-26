@@ -32,21 +32,31 @@ def render():
         with st.expander(f"**{cat}** — {len(items)} funds", expanded=(cat=="Equity")):
             for sub, sub_mfs in sorted(by_sub.items()):
                 st.markdown(f'<div style="font-size:.72rem;color:#A855F7;font-weight:700;letter-spacing:.08em;margin:.6rem 0 .3rem;text-transform:uppercase">{sub}</div>', unsafe_allow_html=True)
-                hdr = st.columns([3.5,1.5,1.2,1.8,1.5,0.6])
-                for col,lbl in zip(hdr,["Fund","AMC","Risk","NAV","Change",""]):
+                hdr = st.columns([3,1.2,1,1.2,1.1,1.1,1.1,0.55])
+                for col,lbl in zip(hdr,["Fund","AMC","Risk","NAV","1Y Ret","3Y Ret","TER",""]):
                     col.markdown(f"<div style='font-size:.7rem;color:#8892AA;font-weight:600'>{lbl}</div>", unsafe_allow_html=True)
                 st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
                 for m in sub_mfs:
                     chg = m.get("change_pct",0)
-                    cc  = "#2ECC7A" if chg>=0 else "#FF5A5A"; sign = "▲" if chg>=0 else "▼"
+                    cc  = "#2ECC7A" if chg>=0 else "#FF5A5A"
                     rl  = m.get("risk_level","—")
                     rc  = {"Low":"#2ECC7A","Moderate":"#F5B731","High":"#FF5A5A","Very High":"#DC2626"}.get(rl,"#8892AA")
-                    hc  = st.columns([3.5,1.5,1.2,1.8,1.5,0.6])
-                    hc[0].markdown(f"<div style='font-weight:600;font-size:.85rem'>{m['name']}</div>", unsafe_allow_html=True)
-                    hc[1].markdown(f"<div style='font-size:.78rem;color:#8892AA'>{m.get('fund_house','')}</div>", unsafe_allow_html=True)
-                    hc[2].markdown(f"<div style='font-size:.78rem;color:{rc};font-weight:600'>{rl}</div>", unsafe_allow_html=True)
-                    hc[3].markdown(f"<div style='font-size:.95rem;font-weight:700'>₹{indian_format(m.get('nav',0))}</div>", unsafe_allow_html=True)
-                    hc[4].markdown(f"<div style='color:{cc};font-weight:700'>{sign} {abs(chg):.4f}%</div>", unsafe_allow_html=True)
-                    if hc[5].button("→", key=f"mfd_{m['symbol']}"):
+                    r1y = m.get("return_1y"); r3y = m.get("return_3y")
+                    ter = m.get("expense_ratio")
+                    aum = m.get("aum",0)
+                    aum_str = f"₹{indian_format(aum/1e7)}.Cr" if aum and aum > 1e7 else (f"₹{indian_format(aum)}" if aum else "")
+                    hc  = st.columns([3,1.2,1,1.2,1.1,1.1,1.1,0.55])
+                    hc[0].markdown(
+                        f"<div style='font-weight:600;font-size:.84rem'>{m['name']}</div>"
+                        f"<div style='font-size:.72rem;color:#8892AA'>{m.get('fund_house','')} {(' · AUM '+aum_str) if aum_str else ''}</div>",
+                        unsafe_allow_html=True)
+                    hc[1].markdown(f"<div style='font-size:.76rem;color:#8892AA'>{m.get('fund_house','')[:14]}</div>", unsafe_allow_html=True)
+                    hc[2].markdown(f"<div style='font-size:.76rem;color:{rc};font-weight:600'>{rl}</div>", unsafe_allow_html=True)
+                    hc[3].markdown(f"<div style='font-size:.9rem;font-weight:700'>₹{indian_format(m.get('nav',0))}</div>"
+                                   f"<div style='font-size:.7rem;color:{cc}'>{'+' if chg>=0 else ''}{chg:.4f}%</div>", unsafe_allow_html=True)
+                    hc[4].markdown(f"<div style='font-size:.84rem;font-weight:600;color:{'#2ECC7A' if r1y and r1y>=0 else '#FF5A5A'}'>{f'{r1y:+.1f}%' if r1y is not None else '—'}</div>", unsafe_allow_html=True)
+                    hc[5].markdown(f"<div style='font-size:.84rem;font-weight:600;color:{'#2ECC7A' if r3y and r3y>=0 else '#FF5A5A'}'>{f'{r3y:+.1f}%' if r3y is not None else '—'}</div>", unsafe_allow_html=True)
+                    hc[6].markdown(f"<div style='font-size:.82rem;color:#F5B731'>{f'{ter:.2f}%' if ter else '—'}</div>", unsafe_allow_html=True)
+                    if hc[7].button("→", key=f"mfd_{m['symbol']}"):
                         st.session_state.selected_symbol = m["symbol"]; navigate("asset_detail")
                     st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
