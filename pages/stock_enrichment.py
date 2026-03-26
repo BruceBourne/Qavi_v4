@@ -80,7 +80,7 @@ def _fetch_sebi_classification():
 
             # Find column indices
             sym_idx = next((i for i,h in enumerate(header)
-                            if h in ("symbol","sym","ticker","scrip_cd","nse_symbol")), 0)
+                            if h in ("symbol","sym","ticker","scrip_cd","nse_symbol","scrip_symbol","tradingsymbol")), 0)
             cat_idx = next((i for i,h in enumerate(header)
                             if any(k in h for k in ("category","cap","classification","group"))), None)
 
@@ -88,7 +88,7 @@ def _fetch_sebi_classification():
             has_explicit_cats = False
             if cat_idx is not None:
                 sample = [l.split(",")[cat_idx].strip().strip('"')
-                          for l in lines[1:min(10,len(lines))] if len(l.split(",")) > cat_idx]
+                          for l in lines[1:min(25,len(lines))] if len(l.split(",")) > cat_idx]
                 has_explicit_cats = any(s in ("Large Cap","Mid Cap","Small Cap") for s in sample)
 
             seen_syms  = set()
@@ -98,19 +98,24 @@ def _fetch_sebi_classification():
             for line in lines[1:]:
                 parts = [p.strip().strip('"') for p in line.split(",")]
                 if len(parts) <= sym_idx: continue
-                sym = parts[sym_idx].upper().strip()
-                # Filter out non-equity series suffixes (e.g. RELIANCE-BE → skip, RELIANCE → keep)
-                if not sym or "-" in sym or sym in seen_syms: continue
-                # Skip header repeats
-                if sym.lower() in ("symbol","sym","ticker"): continue
+                raw_sym = parts[sym_idx].upper().strip()
+                if not raw_sym: continue
+                # Strip series suffix: "RELIANCE-BE" → "RELIANCE"
+                # NSE uses hyphens for series variants — strip, don't skip
+                sym = raw_sym.split("-")[0].strip()
+                if not sym: continue
+                # Skip header repeat rows
+                if sym.lower() in ("symbol","sym","ticker","scrip_symbol","name","company"): continue
+                # Dedup across series variants
+                if sym in seen_syms: continue
                 seen_syms.add(sym)
 
                 if has_explicit_cats and cat_idx is not None and cat_idx < len(parts):
                     cat = parts[cat_idx].strip()
                     if cat in ("Large Cap","Mid Cap","Small Cap"):
                         local_caps[sym] = cat
-                        continue
-                    # Skip row if category present but not one of the three
+                    # Rows with unrecognised category are skipped (not rank-assigned)
+                    # → will get Small Cap by elimination in the apply step
                     continue
 
                 # Rank-based only if NO explicit category column
@@ -124,7 +129,7 @@ def _fetch_sebi_classification():
             n_small = sum(1 for v in local_caps.values() if v=="Small Cap")
 
             # Accept only if counts are plausible (Large ≤ 150, Mid ≤ 200)
-            if len(local_caps) >= 100 and n_large <= 150 and n_mid <= 200:
+            if len(local_caps) >= 50 and n_large <= 150 and n_mid <= 300:
                 src_label = "AMFI" if "amfi" in url else "MCAP.csv"
                 return (local_caps,
                         f"{src_label} — L:{n_large} M:{n_mid} S:{n_small} "

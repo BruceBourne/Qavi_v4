@@ -222,7 +222,7 @@ def render():
                         h_c   = _col(df,"high_price","high","highprice")
                         lo_c  = _col(df,"low_price","low","lowprice")
                         pc_c  = _col(df,"prev_close","previous_close","prevclose","prcls")
-                        vol_c = _col(df,"volume","total_traded_qty","tottrdqty","ttlq")
+                        vol_c = _col(df,"volume","total_traded_qty","tottrdqty","ttlq","ttl_trd_qnty","total_trade_quantity","qty")
                         nm_c  = _col(df,"name","company_name","sc_name","isin_name")
 
                         price_rows = []
@@ -234,18 +234,23 @@ def render():
                             if not sym or sym in ("NAN","SYMBOL","") or cl <= 0: continue
                             pc  = _f(pc_c.iloc[i], cl) if pc_c is not None else cl
                             chg = _f(chg_col.iloc[i] if chg_col is not None else "0")
-                            if chg == 0 and pc: chg = round((cl-pc)/pc*100, 4)
-                            price_rows.append({
+                            if chg == 0 and pc and pc != cl:
+                                chg = round((cl-pc)/pc*100, 4)
+                            row = {
                                 "symbol":sym,"price_date":pd_s,
                                 "open":  _f(o_c.iloc[i],  cl) if o_c  is not None else cl,
                                 "high":  _f(h_c.iloc[i],  cl) if h_c  is not None else cl,
                                 "low":   _f(lo_c.iloc[i], cl) if lo_c is not None else cl,
                                 "close": cl,
-                                "avg_price": _f(avg_c.iloc[i], cl) if avg_c is not None else cl,
                                 "prev_close":pc,"change_pct":round(chg,4),
                                 "volume":_i(vol_c.iloc[i]) if vol_c is not None else 0,
                                 "last_updated":now,
-                            })
+                            }
+                            # avg_price: only include when column exists in file
+                            # (requires ALTER TABLE prices ADD COLUMN IF NOT EXISTS avg_price REAL)
+                            if avg_c is not None:
+                                row["avg_price"] = _f(avg_c.iloc[i], cl)
+                            price_rows.append(row)
                             nm = str(nm_c.iloc[i]).strip() if nm_c is not None else sym
                             asset_rows.append((sym, nm))
 
