@@ -222,7 +222,8 @@ def render():
                         h_c   = _col(df,"high_price","high","highprice")
                         lo_c  = _col(df,"low_price","low","lowprice")
                         pc_c  = _col(df,"prev_close","previous_close","prevclose","prcls")
-                        vol_c = _col(df,"volume","total_traded_qty","tottrdqty","ttlq","ttl_trd_qnty","total_trade_quantity","qty")
+                        vol_c = _col(df,"volume","total_traded_qty","tottrdqty","ttlq",
+                                        "ttl_trd_qnty","total_trade_quantity","qty")
                         nm_c  = _col(df,"name","company_name","sc_name","isin_name")
 
                         price_rows = []
@@ -237,17 +238,19 @@ def render():
                             if chg == 0 and pc and pc != cl:
                                 chg = round((cl-pc)/pc*100, 4)
                             row = {
-                                "symbol":sym,"price_date":pd_s,
-                                "open":  _f(o_c.iloc[i],  cl) if o_c  is not None else cl,
-                                "high":  _f(h_c.iloc[i],  cl) if h_c  is not None else cl,
-                                "low":   _f(lo_c.iloc[i], cl) if lo_c is not None else cl,
-                                "close": cl,
-                                "prev_close":pc,"change_pct":round(chg,4),
-                                "volume":_i(vol_c.iloc[i]) if vol_c is not None else 0,
+                                "symbol":      sym,
+                                "price_date":  pd_s,
+                                "open":        _f(o_c.iloc[i],  cl) if o_c  is not None else cl,
+                                "high":        _f(h_c.iloc[i],  cl) if h_c  is not None else cl,
+                                "low":         _f(lo_c.iloc[i], cl) if lo_c is not None else cl,
+                                "close":       cl,
+                                "prev_close":  pc,
+                                "change_pct":  round(chg, 4),
+                                "volume":      _i(vol_c.iloc[i]) if vol_c is not None else 0,
                                 "last_updated":now,
                             }
-                            # avg_price: only include when column exists in file
-                            # (requires ALTER TABLE prices ADD COLUMN IF NOT EXISTS avg_price REAL)
+                            # avg_price — optional column, only include if present in file
+                            # Requires: ALTER TABLE prices ADD COLUMN IF NOT EXISTS avg_price REAL;
                             if avg_c is not None:
                                 row["avg_price"] = _f(avg_c.iloc[i], cl)
                             price_rows.append(row)
@@ -333,6 +336,9 @@ def render():
     # ── ETFs ──────────────────────────────────────────────────────────────
     with tab2:
         st.markdown("#### ETF Prices")
+        if st.button("⚡ Auto-Fetch from NSE + Yahoo Finance", use_container_width=True, key="etf_autofetch"):
+            navigate("market_auto_fetch")
+        st.markdown("")
         _hint(
             "<b>Symbol:</b> <code>symbol, sc_code, trading_symbol</code><br>"
             "<b>Close/LTP:</b> <code>close, ltp, last_price, closeprice</code><br>"
@@ -408,6 +414,9 @@ def render():
     # ── MF NAVs ───────────────────────────────────────────────────────────
     with tab3:
         st.markdown("#### Mutual Fund NAVs")
+        if st.button("⚡ Auto-Fetch from AMFI (NAV + Returns)", use_container_width=True, key="mf_autofetch"):
+            navigate("market_auto_fetch")
+        st.markdown("")
         _hint(
             "<b>Symbol:</b> <code>symbol, scheme_code, amfi_code</code><br>"
             "<b>NAV:</b> <code>nav, net_asset_value</code><br>"
