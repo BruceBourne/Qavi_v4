@@ -240,6 +240,15 @@ def render():
     risk_filter = fc3.selectbox("Risk", ["All","Low","Low to Moderate","Moderate","High","Very High"],
                                  key="mf_risk")
 
+    # Benefit option filter — Growth vs IDCW
+    bf1, bf2, bf3 = st.columns([1.5, 1.5, 3])
+    benefit_filter = bf1.selectbox("Option", ["Growth", "IDCW", "All"],
+                                    key="mf_benefit",
+                                    help="Growth: NAV grows, no payouts. IDCW: periodic income distribution.")
+    idcw_freq_filter = bf2.selectbox("IDCW Frequency", ["Any","Monthly","Quarterly","Annual","Weekly","Daily"],
+                                      key="mf_idcw_freq",
+                                      help="Only relevant when IDCW is selected") if benefit_filter == "IDCW" else None
+
     # Load all MFs
     raw_funds = get_mutual_funds(search=search if search else None)
 
@@ -261,6 +270,19 @@ def render():
         deduped = [f for f in deduped if f.get("_is_direct", False)]
     if risk_filter != "All":
         deduped = [f for f in deduped if f.get("risk_level","") == risk_filter]
+    # Benefit option filter
+    if benefit_filter == "Growth":
+        deduped = [f for f in deduped if f.get("benefit_option","Growth") == "Growth"
+                   or (not f.get("benefit_option") and "idcw" not in f.get("name","").lower()
+                       and "dividend" not in f.get("name","").lower())]
+    elif benefit_filter == "IDCW":
+        deduped = [f for f in deduped if f.get("benefit_option","") == "IDCW"
+                   or "idcw" in f.get("name","").lower()
+                   or "dividend" in f.get("name","").lower()]
+        if idcw_freq_filter and idcw_freq_filter != "Any":
+            deduped = [f for f in deduped
+                       if f.get("idcw_frequency","") == idcw_freq_filter
+                       or idcw_freq_filter.lower() in f.get("name","").lower()]
 
     # Group by category → sub-category
     by_cat = defaultdict(lambda: defaultdict(list))

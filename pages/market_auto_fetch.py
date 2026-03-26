@@ -33,6 +33,128 @@ _EXCLUDE_KEYWORDS = [
     "interval fund", "interval plan",
 ]
 
+# ── INDIAN MF PLAN / BENEFIT / PAYMENT TAXONOMY ───────────────────────────
+#
+# SEBI MF regulations define two orthogonal axes for every scheme:
+#
+# 1. PLAN TYPE (distribution channel)
+#    • Direct Plan  — investor buys directly from AMC, no distributor commission
+#    • Regular Plan — bought via distributor/broker, higher TER
+#
+# 2. OPTION TYPE (what happens to dividends/income declared by the fund)
+#    a) GROWTH Option
+#       • No payouts — all gains reinvested, NAV grows over time
+#       • Ideal for long-term wealth creation
+#
+#    b) IDCW Option (Income Distribution cum Capital Withdrawal)
+#       Previously called "Dividend" — renamed by SEBI in 2021
+#       Sub-options by PAYOUT FREQUENCY:
+#         • Daily IDCW       — very rare, only liquid/overnight funds
+#         • Weekly IDCW      — liquid / money market funds
+#         • Fortnightly IDCW — rare
+#         • Monthly IDCW     — debt / MIP / balanced advantage funds
+#         • Quarterly IDCW   — debt / hybrid funds
+#         • Half-Yearly IDCW — debt funds
+#         • Annual IDCW      — equity / hybrid (mostly regular plans)
+#         • Flexi IDCW       — declared at fund manager discretion
+#       Sub-options by PAYOUT METHOD:
+#         • Payout           — cash paid to investor's bank account
+#         • Reinvestment     — IDCW amount used to buy more units at NAV
+#         • Transfer (IDCW-T)— transferred to another scheme (rare)
+#
+#    c) BONUS Option — bonus units issued (mostly legacy, phased out)
+#
+# 3. PAYMENT / INVESTMENT MODE (how the investor invests — NOT part of scheme name)
+#    • Lump Sum (One-time)
+#    • SIP — Systematic Investment Plan
+#        Frequencies: Daily / Weekly / Fortnightly / Monthly / Quarterly / Annual
+#    • STP — Systematic Transfer Plan (from one fund to another)
+#    • SWP — Systematic Withdrawal Plan
+#
+# For DB storage: we store plan_type (Direct/Regular), benefit_option (Growth/IDCW/Bonus),
+# idcw_frequency (Monthly/Quarterly/etc.), idcw_method (Payout/Reinvestment).
+# Payment mode (SIP/Lump Sum) is stored at the holdings level, not the fund level.
+#
+# FILTER STRATEGY (for auto-fetch):
+# By default import only: Direct + Growth plans.
+# This gives one clean row per fund — the most commonly preferred option.
+# Regular and IDCW variants are available via their own scheme codes if needed.
+
+def _parse_plan(name: str) -> dict:
+    """
+    Parse an AMFI scheme name to extract:
+      plan_type     : "Direct" | "Regular"
+      benefit_option: "Growth" | "IDCW" | "Bonus" | "Unknown"
+      idcw_frequency: "Daily" | "Weekly" | "Fortnightly" | "Monthly" |
+                      "Quarterly" | "Half-Yearly" | "Annual" | "Flexi" | ""
+      idcw_method   : "Payout" | "Reinvestment" | "Transfer" | ""
+    """
+    n = name.lower()
+
+    # Plan type
+    plan_type = "Direct" if "direct" in n else "Regular"
+
+    # Benefit option — check IDCW first (more specific)
+    idcw_freq   = ""
+    idcw_method = ""
+
+    is_idcw = (
+        "idcw" in n or
+        ("dividend" in n and "yield" not in n)  # "dividend yield fund" ≠ IDCW
+    )
+    is_bonus = "bonus" in n
+
+    if is_idcw:
+        benefit_option = "IDCW"
+        # Frequency detection
+        for freq, kws in [
+            ("Daily",       ("daily",)),
+            ("Weekly",      ("weekly",)),
+            ("Fortnightly", ("fortnightly", "bi-weekly", "biweekly")),
+            ("Monthly",     ("monthly",)),
+            ("Quarterly",   ("quarterly",)),
+            ("Half-Yearly", ("half-yearly", "halfyearly", "half yearly", "bi-annual", "biannual")),
+            ("Annual",      ("annual", "yearly")),
+            ("Flexi",       ("flexi",)),
+        ]:
+            if any(k in n for k in kws):
+                idcw_freq = freq
+                break
+
+        # Method detection
+        if "reinvest" in n:
+            idcw_method = "Reinvestment"
+        elif "transfer" in n:
+            idcw_method = "Transfer"
+        elif "payout" in n or "pay out" in n:
+            idcw_method = "Payout"
+        else:
+            idcw_method = "Payout"   # AMFI default when not specified
+
+    elif is_bonus:
+        benefit_option = "Bonus"
+    elif "growth" in n:
+        benefit_option = "Growth"
+    else:
+        # Fallback: if no keyword, AMFI default for modern schemes is Growth
+        benefit_option = "Growth"
+
+    return {
+        "plan_type":      plan_type,
+        "benefit_option": benefit_option,
+        "idcw_frequency": idcw_freq,
+        "idcw_method":    idcw_method,
+    }
+
+def _is_direct_growth(name: str) -> bool:
+    """True only for Direct + Growth plans — the preferred import filter."""
+    p = _parse_plan(name)
+    return p["plan_type"] == "Direct" and p["benefit_option"] == "Growth"
+
+def _is_regular_growth(name: str) -> bool:
+    p = _parse_plan(name)
+    return p["plan_type"] == "Regular" and p["benefit_option"] == "Growth"
+
 # ── HELPERS ───────────────────────────────────────────────────────────────
 def _get(url, timeout=15, headers=None, session=None):
     try:
@@ -201,6 +323,13 @@ def _build_row(code, meta, navs, details, include_returns=True):
         "nav_date":      navs[0].get("date", ""),
         "last_updated":  datetime.now().isoformat(),
     }
+    # Parse and store plan/benefit/payment classification from scheme name
+    scheme_name = meta.get("scheme_name", "")
+    _plan = _parse_plan(scheme_name)
+    row["plan_type"]      = _plan["plan_type"]
+    row["benefit_option"] = _plan["benefit_option"]
+    row["idcw_frequency"] = _plan["idcw_frequency"]
+    row["idcw_method"]    = _plan["idcw_method"]
     if details:
         if details.get("expenseRatio")           is not None: row["expense_ratio"]         = _f(details["expenseRatio"])
         if details.get("exitLoad")               is not None: row["exit_load"]             = str(details["exitLoad"])
@@ -351,6 +480,9 @@ def render():
                                     help="~1 extra call per fund — use selectively", key="u_hld")
             limit_n  = c2.number_input("Max funds (0 = all)", min_value=0, value=0, step=50, key="u_lim")
 
+            # Plan filter — what to update (only affects _build_row classification, not filtering existing DB)
+            st.caption("ℹ️ Plan classification (Direct/Regular, Growth/IDCW) is re-parsed from scheme name on every fetch.")
+
             if st.button("🚀 Fetch from AMFI", use_container_width=True, key="do_mf_nav"):
                 try:
                     existing = sb().table("mutual_funds").select("symbol,scheme_code,name").execute().data or []
@@ -409,6 +541,7 @@ def render():
             inc_det2 = c1.checkbox("Fetch AUM / expense / exit load", value=True, key="s_det")
             inc_hld2 = c2.checkbox("Fetch top 10 holdings", value=True, key="s_hld")
 
+            st.caption("ℹ️ Plan type (Direct/Regular/Growth/IDCW) is auto-detected from the scheme name and stored.")
             if st.button("🔍 Fetch Details", use_container_width=True, key="do_mf_specific"):
                 codes = [c.strip() for c in codes_raw.strip().split("\n") if c.strip()]
                 if not codes: st.error("Enter at least one scheme code."); return
@@ -466,6 +599,24 @@ def render():
             inc_ret3 = c4.checkbox("Compute returns from history", value=True, key="bl_ret")
             max_imp  = st.number_input("Max schemes", min_value=1, max_value=5000, value=300, step=50)
 
+            # Plan type filter — the most important filter for a clean DB
+            st.markdown("""
+            <div style="background:#0F1117;border:1px solid #252D40;border-radius:7px;
+                padding:.7rem 1rem;margin:.5rem 0;font-size:.79rem;color:#C8D0E0;line-height:1.9">
+                <b>Plan filter (applied during import):</b><br>
+                Each AMFI scheme has up to 4 variants: <b>Direct+Growth</b>, Direct+IDCW,
+                Regular+Growth, Regular+IDCW. Importing all 4 clutters the DB.<br>
+                <span style="color:#2ECC7A">✓ Recommended: Direct+Growth only</span>
+                — lowest TER, long-term wealth creation, one clean row per fund.
+            </div>
+            """, unsafe_allow_html=True)
+            plan_filter = st.radio("Import plan variants", [
+                "Direct + Growth only (recommended)",
+                "Direct plans only (Growth + IDCW)",
+                "Growth plans only (Direct + Regular)",
+                "All variants (Direct/Regular × Growth/IDCW)",
+            ], key="bl_plan", index=0)
+
             if st.button("📋 Load Active Scheme List", use_container_width=True, key="amfi_load"):
                 with st.spinner("Fetching active codes from AMFI…"):
                     active_codes, active_msg = fetch_active_scheme_codes()
@@ -476,6 +627,17 @@ def render():
                 if serr: st.error(f"mfapi error: {serr}"); return
 
                 schemes = [s for s in all_schemes if str(s.get("schemeCode","")) in active_codes]
+
+                # Apply plan filter FIRST (most impactful, reduces list by ~75%)
+                _pf = plan_filter
+                if "Direct + Growth only" in _pf:
+                    schemes = [s for s in schemes if _is_direct_growth(s.get("schemeName",""))]
+                elif "Direct plans only" in _pf:
+                    schemes = [s for s in schemes if "direct" in s.get("schemeName","").lower()]
+                elif "Growth plans only" in _pf:
+                    schemes = [s for s in schemes if _is_direct_growth(s.get("schemeName","")) or _is_regular_growth(s.get("schemeName",""))]
+                # else: All variants — no filter
+
                 if filt_house.strip():
                     fh = filt_house.strip().lower()
                     schemes = [s for s in schemes if fh in s.get("schemeName","").lower()]

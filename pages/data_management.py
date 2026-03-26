@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate
+from utils.session import navigate, back_button
 from utils.db import sb, clear_market_cache
 from utils.crypto import fmt_date, indian_format
 from datetime import date, timedelta
@@ -9,6 +9,8 @@ from datetime import date, timedelta
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
+
+    back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Data Management</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-sub">Storage, historical data cleanup, row counts</div>', unsafe_allow_html=True)
@@ -33,7 +35,7 @@ def render():
     """, unsafe_allow_html=True)
 
     # ── ROW COUNTS ────────────────────────────────────────────────────────
-    tab1, tab2 = st.tabs(["  📊 Row Counts & Storage  ", "  🗑 Delete Historical Data  "])
+    tab1, tab2, tab3 = st.tabs(["  📊 Row Counts & Storage  ", "  🗑 Delete by Date Range  ", "  💣 Delete All Data  "])
 
     with tab1:
         if st.button("🔄 Refresh Counts", use_container_width=False):
@@ -150,7 +152,119 @@ def render():
                         st.session_state.pop(confirm_key, None); st.rerun()
             else:
                 st.info("No price rows found in this date range.")
-    render_asset_delete_section()
+
+    # ── TAB 3: Delete All / Bulk Delete ───────────────────────────────────
+    with tab3:
+        st.markdown("#### Delete All Price Data by Date Range (All Assets)")
+        st.markdown("""
+        <div style="background:#0F1117;border:1px solid #FF5A5A;border-radius:8px;
+            padding:.75rem 1rem;margin-bottom:1rem;font-size:.8rem;color:#C8D0E0">
+            ⚠️ Deletes price rows across <b>all symbols</b> in the selected date range.
+            Holdings and portfolio data are not affected.
+        </div>""", unsafe_allow_html=True)
+
+        all_from = st.date_input("Delete all prices FROM", value=date(2020, 1, 1), key="all_from")
+        all_to   = st.date_input("Delete all prices TO",   value=date.today() - timedelta(days=365), key="all_to")
+
+        if all_from < all_to:
+            try:
+                r_all = sb().table("prices").select("id", count="exact")                    .gte("price_date", str(all_from)).lte("price_date", str(all_to)).execute()
+                all_count = r_all.count if hasattr(r_all,"count") and r_all.count else 0
+            except Exception:
+                all_count = 0
+
+            st.markdown(
+                f'<div style="background:#1E2535;border-radius:8px;padding:.8rem 1rem;margin:.5rem 0">'
+                f'<span style="color:#8892AA;font-size:.82rem">Rows in range: </span>'
+                f'<span style="font-size:.95rem;font-weight:700;color:{"#FF5A5A" if all_count>0 else "#8892AA"}">'
+                f'{all_count:,}</span></div>', unsafe_allow_html=True)
+
+            if all_count > 0:
+                ck_all = "confirm_del_all_range"
+                if not st.session_state.get(ck_all):
+                    if st.button(f"🗑 Delete {all_count:,} rows ({all_from} → {all_to})",
+                                 use_container_width=True, key="del_all_range"):
+                        st.session_state[ck_all] = True; st.rerun()
+                else:
+                    st.error(f"Delete **{all_count:,}** price rows across ALL symbols between {all_from} and {all_to}?")
+                    y, n = st.columns(2)
+                    if y.button("Yes, Delete", use_container_width=True, key="yes_all_range"):
+                        deleted = 0
+                        prog_all = st.progress(0.0, text="Deleting…")
+                        while True:
+                            ids_r = sb().table("prices").select("id")                                .gte("price_date", str(all_from)).lte("price_date", str(all_to))                                .limit(1000).execute()
+                            ids = [r["id"] for r in (ids_r.data or [])]
+                            if not ids: break
+                            for chunk_start in range(0, len(ids), 100):
+                                chunk = ids[chunk_start:chunk_start+100]
+                                sb().table("prices").delete().in_("id", chunk).execute()
+                                deleted += len(chunk)
+                            prog_all.progress(min(deleted/all_count, 1.0), text=f"{deleted:,} deleted…")
+                        prog_all.progress(1.0, text="Done ✓")
+                        clear_market_cache()
+                        st.session_state.pop(ck_all, None)
+                        st.success(f"✅ Deleted {deleted:,} price rows."); st.rerun()
+                    if n.button("Cancel", use_container_width=True, key="no_all_range"):
+                        st.session_state.pop(ck_all, None); st.rerun()
+        else:
+            st.error("'From' date must be before 'To' date.")
+
+        st.markdown("---")
+        st.markdown("#### ☢️ Delete ALL Historical Price Data")
+        st.markdown("""
+        <div style="background:#0F1117;border:2px solid #FF5A5A;border-radius:8px;
+            padding:.75rem 1rem;margin-bottom:1rem;font-size:.8rem;color:#FF5A5A;font-weight:600">
+            DANGER — This deletes every single row in the prices table.
+            Current prices will be restored on next market refresh.
+            All historical chart data will be permanently lost.
+        </div>""", unsafe_allow_html=True)
+
+        try:
+            r_total = sb().table("prices").select("id", count="exact").execute()
+            total_prices = r_total.count if hasattr(r_total,"count") and r_total.count else 0
+        except Exception:
+            total_prices = 0
+
+        st.markdown(
+            f'<div style="background:#1E2535;border-radius:8px;padding:.8rem 1rem;margin:.5rem 0">'
+            f'<span style="color:#8892AA;font-size:.82rem">Total price rows in DB: </span>'
+            f'<span style="font-size:.95rem;font-weight:700;color:#FF5A5A">{total_prices:,}</span>'
+            f'</div>', unsafe_allow_html=True)
+
+        ck_nuke = "confirm_nuke_prices"
+        if not st.session_state.get(ck_nuke):
+            if st.button("☢️ Delete ALL Price Data", use_container_width=True, key="nuke_prices"):
+                st.session_state[ck_nuke] = True; st.rerun()
+        else:
+            st.error(f"Delete ALL **{total_prices:,}** price rows permanently? This cannot be undone.")
+            typed = st.text_input("Type DELETE to confirm", key="nuke_confirm_text")
+            y2, n2 = st.columns(2)
+            if y2.button("Yes, Wipe All Prices", use_container_width=True, key="yes_nuke",
+                         disabled=(typed.strip().upper() != "DELETE")):
+                deleted = 0
+                prog_nuke = st.progress(0.0, text="Wiping…")
+                while True:
+                    ids_r = sb().table("prices").select("id").limit(1000).execute()
+                    ids   = [r["id"] for r in (ids_r.data or [])]
+                    if not ids: break
+                    for chunk_start in range(0, len(ids), 100):
+                        chunk = ids[chunk_start:chunk_start+100]
+                        sb().table("prices").delete().in_("id", chunk).execute()
+                        deleted += len(chunk)
+                    frac = min(deleted/max(total_prices,1), 1.0)
+                    prog_nuke.progress(frac, text=f"{deleted:,} deleted…")
+                prog_nuke.progress(1.0, text="Done ✓")
+                clear_market_cache()
+                st.session_state.pop(ck_nuke, None)
+                st.success(f"✅ All {deleted:,} price rows deleted."); st.rerun()
+            if n2.button("Cancel", use_container_width=True, key="no_nuke"):
+                st.session_state.pop(ck_nuke, None); st.rerun()
+
+        st.markdown("---")
+        render_asset_delete_section()
+
+    st.markdown("<br>", unsafe_allow_html=True)
+    back_button(fallback="profile", label="← Back", key="bot")
 
 
 # ── ASSET CLASS DATA DELETE ───────────────────────────────────────────────
