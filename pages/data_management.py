@@ -1,7 +1,7 @@
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import streamlit as st
-from utils.session import navigate, back_button
+from utils.session import navigate
 from utils.db import sb, clear_market_cache
 from utils.crypto import fmt_date, indian_format
 from datetime import date, timedelta
@@ -9,8 +9,6 @@ from datetime import date, timedelta
 def render():
     if not st.session_state.get("user") or st.session_state.user["role"] not in ("advisor","owner"):
         navigate("login"); return
-
-    back_button(fallback="profile", key="top")
 
     st.markdown('<div class="page-title">Data Management</div>', unsafe_allow_html=True)
     st.markdown('<div class="page-sub">Storage, historical data cleanup, row counts</div>', unsafe_allow_html=True)
@@ -152,6 +150,104 @@ def render():
                         st.session_state.pop(confirm_key, None); st.rerun()
             else:
                 st.info("No price rows found in this date range.")
-    st.markdown("<br>", unsafe_allow_html=True)
-    back_button(fallback="profile", label="← Back", key="bot")
+    render_asset_delete_section()
 
+
+# ── ASSET CLASS DATA DELETE ───────────────────────────────────────────────
+# Injected as additional tab — appended to existing render() via a separate function
+
+def render_asset_delete_section():
+    """Call this at end of render() to add per-asset-class delete controls."""
+    st.markdown(""); st.markdown("#### Delete Market Data by Asset Class")
+    st.markdown(
+        '<div style="font-size:.79rem;color:#FF5A5A;margin-bottom:.6rem">'
+        '⚠️ These actions permanently delete asset and price records. '
+        'Holdings in portfolios are NOT deleted — only the market data tables.</div>',
+        unsafe_allow_html=True)
+
+    ASSET_CLASSES = [
+        ("Equity",       "assets",       "asset_class = 'Equity'",       "prices via assets"),
+        ("Mutual Funds", "mutual_funds",  "all rows",                      "mutual_funds table"),
+        ("ETF",          "assets",        "asset_class = 'ETF'",          "prices via assets"),
+        ("Bonds",        "fixed_income",  "asset_class = 'Bond'",         "fixed_income table"),
+        ("Bank FD",      "fixed_income",  "asset_class = 'Bank FD'",      "fixed_income table"),
+        ("Commodities",  "commodities",   "all rows",                      "commodities table"),
+        ("Crypto",       "assets",        "asset_class = 'Crypto'",       "prices via assets"),
+        ("Real Estate",  "assets",        "asset_class = 'Real Estate'",  "assets only"),
+        ("Physical Gold","assets",        "asset_class = 'Physical Gold'","assets only"),
+    ]
+
+    for ac_label, table, condition, note in ASSET_CLASSES:
+        with st.expander(f"🗑 Delete {ac_label} data"):
+            st.caption(f"Affects: {note} · Condition: {condition}")
+
+            # Count rows
+            try:
+                if table == "assets":
+                    cls = ac_label if ac_label not in ("Crypto","Real Estate","Physical Gold") else ac_label
+                    cnt_r = sb().table("assets").select("id", count="exact")\
+                                .eq("asset_class", cls).execute()
+                    count = cnt_r.count or 0
+                elif table == "mutual_funds":
+                    cnt_r = sb().table("mutual_funds").select("id", count="exact").execute()
+                    count = cnt_r.count or 0
+                elif table == "fixed_income":
+                    ac_map = {"Bonds":"Bond","Bank FD":"Bank FD"}
+                    cnt_r = sb().table("fixed_income").select("id", count="exact")\
+                                .eq("asset_class", ac_map.get(ac_label, ac_label)).execute()
+                    count = cnt_r.count or 0
+                elif table == "commodities":
+                    cnt_r = sb().table("commodities").select("id", count="exact").execute()
+                    count = cnt_r.count or 0
+                else:
+                    count = 0
+            except Exception:
+                count = 0
+
+            also_prices = table == "assets" and ac_label in ("Equity","ETF","Crypto")
+            price_note  = " (+ all associated price records)" if also_prices else ""
+            st.markdown(
+                f"<b>{count:,}</b> records found{price_note}",
+                unsafe_allow_html=True)
+
+            confirm_key = f"confirm_del_{ac_label.replace(' ','_')}"
+            if st.button(f"Delete all {ac_label} data", key=f"del_btn_{ac_label}",
+                         use_container_width=True):
+                st.session_state[confirm_key] = True; st.rerun()
+
+            if st.session_state.get(confirm_key):
+                st.error(f"Delete ALL {ac_label} data permanently?")
+                cy, cn = st.columns(2)
+                if cy.button("Yes, delete", key=f"yes_{ac_label}", use_container_width=True):
+                    try:
+                        if table == "assets":
+                            # Get symbols first, then delete prices, then assets
+                            syms_r = sb().table("assets").select("symbol")\
+                                         .eq("asset_class", ac_label).execute().data or []
+                            syms   = [r["symbol"] for r in syms_r]
+                            if syms and also_prices:
+                                # Delete prices in batches
+                                for i in range(0, len(syms), 500):
+                                    sb().table("prices").delete()\
+                                        .in_("symbol", syms[i:i+500]).execute()
+                            sb().table("assets").delete()\
+                                .eq("asset_class", ac_label).execute()
+                        elif table == "mutual_funds":
+                            sb().table("mutual_funds").delete()\
+                                .neq("id", "00000000-0000-0000-0000-000000000000")\
+                                .execute()
+                        elif table == "fixed_income":
+                            ac_map = {"Bonds":"Bond","Bank FD":"Bank FD"}
+                            sb().table("fixed_income").delete()\
+                                .eq("asset_class", ac_map.get(ac_label, ac_label)).execute()
+                        elif table == "commodities":
+                            sb().table("commodities").delete()\
+                                .neq("id","00000000-0000-0000-0000-000000000000").execute()
+                        clear_market_cache()
+                        st.session_state.pop(confirm_key, None)
+                        st.success(f"✅ {ac_label} data deleted.")
+                        st.rerun()
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                if cn.button("Cancel", key=f"no_{ac_label}", use_container_width=True):
+                    st.session_state.pop(confirm_key, None); st.rerun()

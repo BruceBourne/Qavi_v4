@@ -190,8 +190,11 @@ def _build_row(code, meta, navs, details, include_returns=True):
         "symbol":        f"MF{code}",
         "name":          meta.get("scheme_name", f"MF{code}"),
         "fund_house":    meta.get("fund_house", ""),
-        "category":      meta.get("scheme_category", ""),
-        "sub_category":  meta.get("scheme_type", ""),
+        **dict(zip(("category","sub_category"),
+                   _sebi_normalise(
+                       meta.get("scheme_category",""),
+                       meta.get("scheme_type",""),
+                       meta.get("scheme_name","")))),
         "nav":           cur,
         "prev_nav":      prev,
         "change_pct":    _pct(cur, prev),
@@ -212,6 +215,37 @@ def _build_row(code, meta, navs, details, include_returns=True):
     if include_returns:
         row.update(compute_returns(navs))
     return row
+
+
+def _sebi_normalise(raw_category: str, raw_sub: str, name: str):
+    """
+    Map AMFI scheme_category + scheme_type → clean (category, sub_category).
+    Ensures ETF / FOF are tagged correctly so market_mf.py can filter them out.
+    """
+    cat_lo  = raw_category.lower()
+    sub_lo  = raw_sub.lower()
+    name_lo = name.lower()
+
+    # Tag ETFs / FOFs so they stay out of MF list
+    etf_kw  = ("etf","exchange traded","index fund","nifty etf","sensex etf")
+    fof_kw  = ("fund of fund","fof - domestic","fof - overseas")
+    if any(k in name_lo or k in cat_lo for k in etf_kw):
+        return "ETF", raw_sub or "Index ETF"
+    if any(k in cat_lo or k in sub_lo for k in fof_kw):
+        return "Fund of Funds", raw_sub or "FOF"
+
+    # Strip plan suffix from sub_category (Growth / IDCW stored separately)
+    import re
+    clean_sub = re.sub(r"\s*[-–]?\s*(idcw|dividend|growth|reinvestment|payout)$",
+                       "", raw_sub, flags=re.IGNORECASE).strip()
+
+    # Keep category consistent with SEBI groupings
+    if "equity" in cat_lo:   return "Equity", clean_sub or "Equity Other"
+    if "debt" in cat_lo:     return "Debt",   clean_sub or "Debt Other"
+    if "hybrid" in cat_lo:   return "Hybrid", clean_sub or "Hybrid Other"
+    if "solution" in cat_lo: return "Solution Oriented", clean_sub or ""
+    if "other" in cat_lo:    return "Other",  clean_sub or ""
+    return raw_category, clean_sub or raw_sub
 
 # ── ETF HELPERS ───────────────────────────────────────────────────────────
 def _nse_session():
