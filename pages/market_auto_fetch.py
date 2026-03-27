@@ -443,8 +443,88 @@ def _sebi_normalise(raw_category: str, raw_sub: str, name: str):
             return "Fund of Funds", sub_from_cat or "FOF"
         return "Other", sub_from_cat or "Other"
 
-    # Fallback — use what we have
+    # Fallback — try to classify from fund name when category is unhelpful
+    if not raw_category or raw_category.lower() in ("other", ""):
+        return _classify_mf_from_name(name), _classify_mf_sub_from_name(name)
     return raw_category or "Other", sub_from_cat or raw_sub or "Other"
+
+
+def _classify_mf_from_name(name: str) -> str:
+    """Classify MF category purely from fund name when scheme_category is absent."""
+    n = name.lower()
+    if any(k in n for k in ("liquid", "overnight", "ultra short", "low duration",
+                             "short duration", "medium duration", "long duration",
+                             "dynamic bond", "corporate bond", "banking and psu",
+                             "banking & psu", "credit risk", "gilt", "floater",
+                             "money market")):
+        return "Debt"
+    if any(k in n for k in ("aggressive hybrid", "conservative hybrid",
+                             "balanced advantage", "multi asset", "arbitrage",
+                             "equity savings", "hybrid")):
+        return "Hybrid"
+    if any(k in n for k in ("fund of fund", " fof", "overseas fund")):
+        return "Fund of Funds"
+    if any(k in n for k in ("retirement", "children", "child care")):
+        return "Solution Oriented"
+    if any(k in n for k in ("etf", "exchange traded", "index fund")):
+        return "ETF"
+    # Default to Equity for unmatched (most funds are equity)
+    return "Equity"
+
+
+def _classify_mf_sub_from_name(name: str) -> str:
+    """Classify MF sub-category purely from fund name."""
+    n = name.lower()
+    # Equity subs
+    if "large cap" in n or "bluechip" in n or "blue chip" in n or "large-cap" in n:
+        return "Large Cap Fund"
+    if "mid cap" in n or "midcap" in n or "mid-cap" in n:
+        return "Mid Cap Fund"
+    if "small cap" in n or "smallcap" in n or "small-cap" in n:
+        return "Small Cap Fund"
+    if "large & mid" in n or "large and mid" in n:
+        return "Large & Mid Cap Fund"
+    if "flexi cap" in n or "flexicap" in n or "flexi-cap" in n:
+        return "Flexi Cap Fund"
+    if "multi cap" in n or "multicap" in n:
+        return "Multi Cap Fund"
+    if "elss" in n or "tax sav" in n or "tax-sav" in n:
+        return "ELSS"
+    if "focused" in n:
+        return "Focused Fund"
+    if "dividend yield" in n:
+        return "Dividend Yield Fund"
+    if "value fund" in n:
+        return "Value Fund"
+    if "contra" in n:
+        return "Contra Fund"
+    if "sector" in n or "thematic" in n or "psu" in n or "infra" in n or "pharma" in n:
+        return "Sectoral/Thematic"
+    if "international" in n or "global" in n or "overseas" in n or "us fund" in n:
+        return "International"
+    # Debt subs
+    if "liquid" in n:           return "Liquid Fund"
+    if "overnight" in n:        return "Overnight Fund"
+    if "ultra short" in n:      return "Ultra Short Duration Fund"
+    if "low duration" in n:     return "Low Duration Fund"
+    if "short duration" in n:   return "Short Duration Fund"
+    if "medium duration" in n:  return "Medium Duration Fund"
+    if "long duration" in n:    return "Long Duration Fund"
+    if "dynamic bond" in n:     return "Dynamic Bond"
+    if "corporate bond" in n:   return "Corporate Bond Fund"
+    if "banking and psu" in n or "banking & psu" in n: return "Banking and PSU Fund"
+    if "credit risk" in n:      return "Credit Risk Fund"
+    if "gilt" in n:             return "Gilt Fund"
+    if "floater" in n:          return "Floater Fund"
+    if "money market" in n:     return "Money Market Fund"
+    # Hybrid subs
+    if "aggressive hybrid" in n:    return "Aggressive Hybrid Fund"
+    if "conservative hybrid" in n:  return "Conservative Hybrid Fund"
+    if "balanced advantage" in n:   return "Balanced Advantage"
+    if "multi asset" in n:          return "Multi Asset Allocation"
+    if "arbitrage" in n:            return "Arbitrage Fund"
+    if "equity savings" in n:       return "Equity Savings"
+    return ""
 
 # ── ETF HELPERS ───────────────────────────────────────────────────────────
 def _nse_session():
@@ -799,7 +879,11 @@ def render():
                 st.markdown("""
                 **Active** = listed in AMFI NAVAll.txt with NAV date within last 10 trading days.
 
-                **Always excluded** (regardless of filters below):
+                **Default settings fetch Growth plans only** — no IDCW, no sub-annual distribution,
+            no FMPs, no closed-ended funds. This gives you long-term compounding funds suitable
+            for portfolio tracking. Change filters below only if you specifically need income funds.
+
+            **Always excluded** (regardless of filters below):
                 - Fixed Maturity Plans (FMP) — closed-ended, fixed tenure
                 - Capital Protection Oriented Schemes — closed-ended
                 - Interval Funds / Interval Plans — limited redemption windows

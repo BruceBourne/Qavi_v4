@@ -280,22 +280,15 @@ def render():
     if b5.button("FDs & Commodities", use_container_width=True): navigate("market_fd")
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # Filters
-    fc1, fc2, fc3 = st.columns([2, 1.5, 1.5])
-    search      = fc1.text_input("🔍 Search", placeholder="Fund name or AMC…",
+    # Filters — search + risk only (no plan/IDCW — market page shows Growth only)
+    fc1, fc2 = st.columns([2.5, 1.5])
+    search      = fc1.text_input("🔍 Search", placeholder="Fund name, AMC, or category…",
                                   label_visibility="collapsed", key="mf_search")
-    show_direct = fc2.checkbox("Direct plans only", value=True, key="mf_direct")
-    risk_filter = fc3.selectbox("Risk", ["All","Low","Low to Moderate","Moderate","High","Very High"],
+    risk_filter = fc2.selectbox("Risk", ["All","Low","Low to Moderate","Moderate","High","Very High"],
                                  key="mf_risk")
 
-    # Benefit option filter — Growth vs IDCW
-    bf1, bf2, bf3 = st.columns([1.5, 1.5, 3])
-    benefit_filter = bf1.selectbox("Option", ["Growth", "IDCW", "All"],
-                                    key="mf_benefit",
-                                    help="Growth: NAV grows, no payouts. IDCW: periodic income distribution.")
-    idcw_freq_filter = bf2.selectbox("IDCW Frequency", ["Any","Monthly","Quarterly","Annual","Weekly","Daily"],
-                                      key="mf_idcw_freq",
-                                      help="Only relevant when IDCW is selected") if benefit_filter == "IDCW" else None
+    benefit_filter   = "Growth"    # Market page always shows Growth plans
+    idcw_freq_filter = None        # Not used
 
     # Load all MFs
     raw_funds = get_mutual_funds(search=search if search else None)
@@ -314,23 +307,17 @@ def render():
     deduped = _deduplicate(classified)
 
     # Apply filters
-    if show_direct:
-        deduped = [f for f in deduped if f.get("_is_direct", False)]
+    # Show both Direct and Regular — user chose during import
+    # (Direct preferred during import, but don't hide regular if present)
     if risk_filter != "All":
         deduped = [f for f in deduped if f.get("risk_level","") == risk_filter]
     # Benefit option filter
-    if benefit_filter == "Growth":
-        deduped = [f for f in deduped if f.get("benefit_option","Growth") == "Growth"
-                   or (not f.get("benefit_option") and "idcw" not in f.get("name","").lower()
-                       and "dividend" not in f.get("name","").lower())]
-    elif benefit_filter == "IDCW":
-        deduped = [f for f in deduped if f.get("benefit_option","") == "IDCW"
-                   or "idcw" in f.get("name","").lower()
-                   or "dividend" in f.get("name","").lower()]
-        if idcw_freq_filter and idcw_freq_filter != "Any":
-            deduped = [f for f in deduped
-                       if f.get("idcw_frequency","") == idcw_freq_filter
-                       or idcw_freq_filter.lower() in f.get("name","").lower()]
+    # Always filter to Growth only on market page — IDCW excluded
+    deduped = [f for f in deduped
+               if f.get("benefit_option","Growth") == "Growth"
+               or (not f.get("benefit_option")
+                   and "idcw" not in f.get("name","").lower()
+                   and "dividend" not in f.get("name","").lower())]
 
     # Group by category → sub-category
     by_cat = defaultdict(lambda: defaultdict(list))
@@ -364,6 +351,7 @@ def render():
                          "Arbitrage Fund","Equity Savings","Hybrid Other"],
     }
 
+    PAGE_SIZE = 50
     total_shown = 0
     for cat in CAT_ORDER + [c for c in by_cat if c not in CAT_ORDER]:
         subs = by_cat.get(cat, {})
@@ -380,11 +368,25 @@ def render():
                 items = subs.get(sub, [])
                 if not items: continue
 
+                # Sort alphabetically
+                items_sorted = sorted(items, key=lambda x: x.get("name","").lower())
+                n_pages      = max(1, (len(items_sorted) + PAGE_SIZE - 1) // PAGE_SIZE)
+                page_key     = f"mf_pg_{cat[:6]}_{sub[:8]}"
+                cur_page     = st.session_state.get(page_key, 0)
+                cur_page     = max(0, min(cur_page, n_pages - 1))
+                page_items   = items_sorted[cur_page*PAGE_SIZE : (cur_page+1)*PAGE_SIZE]
+                start_n      = cur_page * PAGE_SIZE + 1
+                end_n        = min((cur_page+1) * PAGE_SIZE, len(items_sorted))
+
+                sub_label = (f'{sub} &nbsp;'
+                             f'<span style="color:#4E5A70;font-weight:400">'
+                             f'({len(items_sorted)} funds'
+                             f'{f", page {cur_page+1}/{n_pages}" if n_pages>1 else ""})'
+                             f'</span>')
                 st.markdown(
                     f'<div style="font-size:.71rem;color:#A855F7;font-weight:700;'
                     f'letter-spacing:.08em;margin:.7rem 0 .3rem;text-transform:uppercase">'
-                    f'{sub} &nbsp;<span style="color:#4E5A70;font-weight:400">({len(items)})</span>'
-                    f'</div>', unsafe_allow_html=True)
+                    f'{sub_label}</div>', unsafe_allow_html=True)
 
                 # Table header
                 hdr = st.columns([3.5, 1, 1.2, 1, 1, 1, 1, 0.5])
@@ -394,7 +396,7 @@ def render():
                         unsafe_allow_html=True)
                 st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
 
-                for m in sorted(items, key=lambda x: -(x.get("aum") or 0))[:50]:
+                for m in page_items:
                     aum    = m.get("aum",0) or 0
                     aum_s  = f"₹{indian_format(round(aum/1e7))} Cr" if aum >= 1e7 else ""
                     ter    = m.get("expense_ratio")
@@ -406,21 +408,15 @@ def render():
                     chg_c  = "#2ECC7A" if chg >= 0 else "#FF5A5A"
                     rl     = m.get("risk_level","")
 
-                    # Variant pills (Direct/Regular, Growth/IDCW)
-                    variants   = m.get("_variants",[])
+                    # Plan tag — Direct/Regular indicator
                     direct_tag = ('<span style="font-size:.66rem;background:#4F7EFF22;color:#4F7EFF;'
                                   'border-radius:3px;padding:.05rem .35rem;margin-right:.3rem">Direct</span>'
                                   if m.get("_is_direct") else
                                   '<span style="font-size:.66rem;background:#8892AA22;color:#8892AA;'
                                   'border-radius:3px;padding:.05rem .35rem;margin-right:.3rem">Regular</span>')
-                    plan_tag   = ('<span style="font-size:.66rem;background:#2ECC7A22;color:#2ECC7A;'
-                                  'border-radius:3px;padding:.05rem .35rem">Growth</span>'
-                                  if m.get("_plan_type") == "Growth" else
-                                  '<span style="font-size:.66rem;background:#F5B73122;color:#F5B731;'
-                                  'border-radius:3px;padding:.05rem .35rem">IDCW</span>')
-                    var_count  = len(variants)
-                    var_hint   = (f'<span style="font-size:.64rem;color:#4E5A70"> +{var_count-1} variants</span>'
-                                  if var_count > 1 else "")
+                    variants  = m.get("_variants",[])
+                    var_hint  = (f'<span style="font-size:.64rem;color:#4E5A70"> +{len(variants)-1} variants</span>'
+                                 if len(variants) > 1 else "")
 
                     hc = st.columns([3.5, 1, 1.2, 1, 1, 1, 1, 0.5])
                     hc[0].markdown(
@@ -430,7 +426,7 @@ def render():
                         f"{m.get('fund_house','')} "
                         f"{'· '+aum_s if aum_s else ''}"
                         f"</div>"
-                        f"<div style='margin-top:.2rem'>{direct_tag}{plan_tag}{var_hint}</div>",
+                        f"<div style='margin-top:.2rem'>{direct_tag}{var_hint}</div>",
                         unsafe_allow_html=True)
                     hc[1].markdown(_risk_badge(rl), unsafe_allow_html=True)
                     hc[2].markdown(
@@ -444,18 +440,27 @@ def render():
                         f"<div style='font-size:.82rem;color:#F5B731'>"
                         f"{f'{ter:.2f}%' if ter else '—'}</div>",
                         unsafe_allow_html=True)
-                    if hc[7].button("→", key=f"mfd_{m['symbol']}_{sub[:4]}"):
+                    if hc[7].button("→", key=f"mfd_{m['symbol']}_{sub[:4]}_{cur_page}"):
                         st.session_state.selected_symbol = m["symbol"]
                         navigate("asset_detail")
                     st.markdown('<hr class="divider"/>', unsafe_allow_html=True)
 
-                if len(items) > 50:
-                    st.caption(f"Showing top 50 by AUM. Search to narrow.")
+                # Pagination controls
+                if n_pages > 1:
+                    pc1, pc2, pc3 = st.columns([1, 3, 1])
+                    if pc1.button("← Prev", key=f"prev_{page_key}",
+                                  disabled=(cur_page == 0), use_container_width=True):
+                        st.session_state[page_key] = cur_page - 1; st.rerun()
+                    pc2.markdown(
+                        f'<div style="text-align:center;font-size:.79rem;color:#8892AA;padding:.5rem 0">'
+                        f'{start_n}–{end_n} of {len(items_sorted)} funds'
+                        f' &nbsp;·&nbsp; Page {cur_page+1} of {n_pages}</div>',
+                        unsafe_allow_html=True)
+                    if pc3.button("Next →", key=f"next_{page_key}",
+                                  disabled=(cur_page >= n_pages-1), use_container_width=True):
+                        st.session_state[page_key] = cur_page + 1; st.rerun()
 
     if total_shown == 0:
-        st.info("No mutual funds found. Run Auto-Fetch from Market Upload → MF NAVs to populate.")
+        st.info("No mutual funds found. Go to Profile → Market Data Upload → Auto Fetch to populate.")
 
-    st.markdown("")
-    if st.session_state.get("user",{}).get("role") in ("advisor","owner"):
-        if st.button("⚡ Auto-Fetch MF Data from AMFI", use_container_width=True, key="mf_go_fetch"):
-            navigate("market_auto_fetch")
+
