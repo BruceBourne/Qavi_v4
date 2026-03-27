@@ -27,11 +27,44 @@ import time, requests
 MFAPI_BASE  = "https://api.mfapi.in/mf"
 AMFI_NAVALL = "https://www.amfiindia.com/spages/NAVAll.txt"
 
-_EXCLUDE_KEYWORDS = [
-    "segregated portfolio", "segregated fund",
-    "fmp", "fixed maturity plan",
-    "interval fund", "interval plan",
+# ── SCHEME EXCLUSION LIST ─────────────────────────────────────────────────
+# All strings are matched as substrings of the LOWER-CASED scheme name.
+# Covers every closed-ended / matured / unwanted scheme type in the Indian
+# MF industry as defined by SEBI / AMFI regulations.
+
+# CLOSED-ENDED FUNDS — fixed tenure, not redeemable before maturity
+_CLOSED_ENDED = [
+    "fixed maturity plan", "fmp",          # Fixed Maturity Plans (FMPs)
+    "capital protection", "capital protect",# Capital Protection Oriented Schemes
+    "infrastructure debt fund",             # Infrastructure Debt Funds (IDF)
+    "real estate",                          # Real Estate MFs (REIT-adjacent)
+    " cef ",                                # Closed-Ended Fund abbreviation
 ]
+
+# INTERVAL FUNDS — redeemable only during specified windows
+_INTERVAL_FUNDS = [
+    "interval fund", "interval plan",
+    "interval scheme",
+]
+
+# SEGREGATED PORTFOLIOS — side-pocketed distressed assets
+_SEGREGATED = [
+    "segregated portfolio", "segregated fund",
+    "side pocket",
+]
+
+# OTHER UNWANTED
+_OTHER_UNWANTED = [
+    "matured scheme",                        # explicitly matured / wound-up
+    "wound up",
+    "under suspension",
+    "fund of funds - overseas",              # FOF-Overseas have RBI/SEBI limits
+]
+
+# Combined — used in active scheme filter
+_EXCLUDE_KEYWORDS = (
+    _CLOSED_ENDED + _INTERVAL_FUNDS + _SEGREGATED + _OTHER_UNWANTED
+)
 
 # ── INDIAN MF PLAN / BENEFIT / PAYMENT TAXONOMY ───────────────────────────
 #
@@ -154,33 +187,6 @@ def _is_direct_growth(name: str) -> bool:
 def _is_regular_growth(name: str) -> bool:
     p = _parse_plan(name)
     return p["plan_type"] == "Regular" and p["benefit_option"] == "Growth"
-
-def _is_annual_compounding(name: str) -> bool:
-    """
-    True for funds that compound or distribute on an annual basis or longer.
-    Excludes Daily/Weekly/Fortnightly/Monthly/Quarterly/Half-Yearly IDCW —
-    these are income-distribution products, not long-term growth vehicles.
-    Includes:
-      • All Growth plans (NAV grows, no payouts — effectively annual compounding)
-      • Annual IDCW (distributes once a year — still long-term oriented)
-    Excludes Monthly, Quarterly, etc. IDCW variants.
-    """
-    p = _parse_plan(name)
-    if p["benefit_option"] == "Growth":
-        return True   # Growth always qualifies
-    if p["benefit_option"] == "IDCW":
-        freq = p["idcw_frequency"]
-        # Only Annual IDCW (or unspecified frequency Annual context) qualifies
-        if freq in ("Annual", "Flexi", ""):
-            # For empty frequency, only include if name explicitly says "annual"
-            # or has no frequency keyword at all (treated as annual)
-            n = name.lower()
-            sub_annual_kw = ("daily","weekly","fortnightly","monthly",
-                             "quarterly","half-yearly","halfyearly","bi-annual","biannual")
-            if not any(k in n for k in sub_annual_kw):
-                return True   # IDCW but no sub-annual keyword → include
-        return False
-    return False  # Bonus etc. excluded
 
 # ── HELPERS ───────────────────────────────────────────────────────────────
 def _get(url, timeout=15, headers=None, session=None):
@@ -375,57 +381,135 @@ def _build_row(code, meta, navs, details, include_returns=True):
 
 def _sebi_normalise(raw_category: str, raw_sub: str, name: str):
     """
-    Map AMFI scheme_category + scheme_type → clean (category, sub_category).
-    Ensures ETF / FOF are tagged correctly so market_mf.py can filter them out.
+    Map AMFI scheme_category + scheme_type → (category, sub_category) for DB storage.
+
+    mfapi.in returns:
+      meta.scheme_category = "Equity Scheme - Large Cap Fund"  ← full AMFI string
+      meta.scheme_type     = "Open Ended Schemes"               ← not useful for sub-type
+      meta.scheme_name     = "Axis Bluechip Fund - Direct Plan - Growth"
+
+    The sub-category MUST be extracted from the scheme_category string (after the " - ").
+    Using scheme_type for sub_category was the bug that sent everything to "Other".
     """
+    import re
     cat_lo  = raw_category.lower()
-    sub_lo  = raw_sub.lower()
     name_lo = name.lower()
 
-    # Tag ETFs / FOFs so they stay out of MF list
-    etf_kw  = ("etf","exchange traded","index fund","nifty etf","sensex etf")
-    fof_kw  = ("fund of fund","fof - domestic","fof - overseas")
+    # ── Tag ETFs / FOFs first ─────────────────────────────────────────────
+    etf_kw = ("etf", "exchange traded", "index fund")
+    fof_kw = ("fund of fund", "fof - domestic", "fof - overseas", "other scheme - fund of funds")
     if any(k in name_lo or k in cat_lo for k in etf_kw):
-        return "ETF", raw_sub or "Index ETF"
-    if any(k in cat_lo or k in sub_lo for k in fof_kw):
-        return "Fund of Funds", raw_sub or "FOF"
+        return "ETF", "Index ETF"
+    if any(k in cat_lo for k in fof_kw):
+        return "Fund of Funds", "FOF"
 
-    # Strip plan suffix from sub_category (Growth / IDCW stored separately)
-    import re
-    clean_sub = re.sub(r"\s*[-–]?\s*(idcw|dividend|growth|reinvestment|payout)$",
-                       "", raw_sub, flags=re.IGNORECASE).strip()
+    # ── Extract sub-type from the scheme_category string ─────────────────
+    # AMFI format: "Equity Scheme - Large Cap Fund"
+    #              "Debt Scheme - Liquid Fund"
+    #              "Hybrid Scheme - Aggressive Hybrid Fund"
+    # The part after " - " is the actual SEBI sub-category.
+    sub_from_cat = ""
+    if " - " in raw_category:
+        sub_from_cat = raw_category.split(" - ", 1)[1].strip()
+    elif "–" in raw_category:
+        sub_from_cat = raw_category.split("–", 1)[1].strip()
 
-    # Keep category consistent with SEBI groupings
-    if "equity" in cat_lo:   return "Equity", clean_sub or "Equity Other"
-    if "debt" in cat_lo:     return "Debt",   clean_sub or "Debt Other"
-    if "hybrid" in cat_lo:   return "Hybrid", clean_sub or "Hybrid Other"
-    if "solution" in cat_lo: return "Solution Oriented", clean_sub or ""
-    if "other" in cat_lo:    return "Other",  clean_sub or ""
-    return raw_category, clean_sub or raw_sub
+    # Also strip any trailing plan keywords that may have leaked in
+    sub_from_cat = re.sub(
+        r"\s*[-–]?\s*(idcw|dividend|growth|reinvestment|payout|direct|regular)$",
+        "", sub_from_cat, flags=re.IGNORECASE
+    ).strip()
+
+    # ── SEBI category → (category, sub_category) ─────────────────────────
+    # Full list of AMFI scheme_category prefixes:
+    if "equity scheme" in cat_lo:
+        return "Equity", sub_from_cat or "Equity Other"
+
+    if "debt scheme" in cat_lo:
+        return "Debt", sub_from_cat or "Debt Other"
+
+    if "hybrid scheme" in cat_lo:
+        return "Hybrid", sub_from_cat or "Hybrid Other"
+
+    if "solution oriented" in cat_lo:
+        return "Solution Oriented", sub_from_cat or "Solution Oriented"
+
+    if "index fund" in cat_lo:
+        return "ETF", "Index Fund"   # index funds → ETF page
+
+    if "other scheme" in cat_lo:
+        # "Other Scheme - Fund of Funds (Domestic)" etc.
+        if "fund of fund" in cat_lo:
+            return "Fund of Funds", sub_from_cat or "FOF"
+        return "Other", sub_from_cat or "Other"
+
+    # Fallback — use what we have
+    return raw_category or "Other", sub_from_cat or raw_sub or "Other"
 
 # ── ETF HELPERS ───────────────────────────────────────────────────────────
 def _nse_session():
+    """
+    NSE requires a proper cookie chain: homepage → market page → API call.
+    Without cookies from prior page visits the API returns 401/403.
+    """
     sess = requests.Session()
-    sess.headers.update({
-        "User-Agent":      "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        "Accept":          "application/json,text/html,*/*",
+    base_headers = {
+        "User-Agent":      ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36"),
+        "Accept":          "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
         "Accept-Language": "en-IN,en;q=0.9",
-        "Referer":         "https://www.nseindia.com/",
-    })
-    try: sess.get("https://www.nseindia.com/", timeout=8)
-    except: pass
-    time.sleep(0.5)
+        "Accept-Encoding": "gzip, deflate, br",
+        "Connection":      "keep-alive",
+    }
+    sess.headers.update(base_headers)
+    # Step 1: homepage — establishes initial cookies
+    try:
+        sess.get("https://www.nseindia.com/", timeout=10)
+    except Exception:
+        pass
+    time.sleep(1.0)
+    # Step 2: market data page — NSE validates cookie chain from this page
+    try:
+        sess.get("https://www.nseindia.com/market-data/exchange-traded-funds-etf", timeout=10)
+    except Exception:
+        pass
+    time.sleep(0.8)
     return sess
 
 def fetch_etf_data_nse():
+    """
+    Fetch ETF list from NSE.
+    Falls back to a curated static list if NSE API is unavailable (common
+    outside Indian market hours or after NSE header changes).
+    """
     sess = _nse_session()
+    api_headers = {
+        "Accept":           "application/json, text/plain, */*",
+        "Referer":          "https://www.nseindia.com/market-data/exchange-traded-funds-etf",
+        "X-Requested-With": "XMLHttpRequest",
+        "sec-fetch-dest":   "empty",
+        "sec-fetch-mode":   "cors",
+        "sec-fetch-site":   "same-origin",
+    }
     r, err = _get(
-        "https://www.nseindia.com/api/etf", session=sess,
-        headers={"Referer": "https://www.nseindia.com/market-data/exchange-traded-funds-etf"},
+        "https://www.nseindia.com/api/etf",
+        session=sess,
+        headers=api_headers,
+        timeout=15,
     )
-    if err: return None, err
-    try: return r.json().get("data", []), None
-    except Exception as e: return None, str(e)
+    if err or not r:
+        return None, f"NSE API error: {err}"
+    try:
+        data = r.json()
+        if isinstance(data, dict) and "data" in data:
+            return data["data"], None
+        # Some NSE responses return the list directly
+        if isinstance(data, list):
+            return data, None
+        return None, f"Unexpected NSE response format: {str(data)[:100]}"
+    except Exception as e:
+        return None, str(e)
 
 def fetch_yf_returns(symbol_ns):
     try:
@@ -454,6 +538,90 @@ def fetch_yf_returns(symbol_ns):
             "benchmark":     info.get("category", ""),
         }.items() if v}
     except: return {}
+
+def fetch_mf_yf_details(symbol_yf: str) -> dict:
+    """
+    Fetch extended MF data from Yahoo Finance using the .BO (BSE) or
+    fund symbol. Returns AUM, expense ratio, top holdings, sector breakdown.
+    symbol_yf examples: "0P0000XVEK.BO", "0P00005SFK.BO" (Yahoo's own MF codes)
+    or scheme_name-based lookup.
+    """
+    try:
+        import yfinance as yf
+        tk   = yf.Ticker(symbol_yf)
+        info = tk.info or {}
+        if not info:
+            return {}
+
+        result = {}
+        if info.get("totalAssets"):
+            result["aum"] = float(info["totalAssets"])
+        if info.get("annualReportExpenseRatio") is not None:
+            result["expense_ratio"] = round(float(info["annualReportExpenseRatio"]), 4)
+        if info.get("fundFamily"):
+            result["fund_house"] = str(info["fundFamily"])
+
+        # Top holdings from Yahoo Finance
+        holdings_data = []
+        try:
+            holdings = tk.get_institutional_holders()
+            if holdings is not None and not holdings.empty:
+                for _, row in holdings.head(10).iterrows():
+                    holdings_data.append({
+                        "company":    str(row.get("Holder", "")),
+                        "percentage": float(row.get("% Out", 0) or 0) * 100,
+                        "sector":     "",
+                    })
+        except Exception:
+            pass
+
+        # Alternatively use fund holdings if available
+        try:
+            fund_holdings = tk.funds_data
+            if fund_holdings and hasattr(fund_holdings, "top_holdings"):
+                top_h = fund_holdings.top_holdings
+                if top_h is not None and not top_h.empty:
+                    holdings_data = []
+                    for _, row in top_h.head(10).iterrows():
+                        holdings_data.append({
+                            "company":    str(row.get("Symbol", row.get("Name", ""))),
+                            "percentage": float(row.get("Holding Percent", 0) or 0),
+                            "sector":     str(row.get("Sector", "")),
+                        })
+        except Exception:
+            pass
+
+        if holdings_data:
+            import json
+            result["top_holdings"] = json.dumps(holdings_data)
+
+        # Sector breakdown
+        try:
+            fund_data = tk.funds_data
+            if fund_data and hasattr(fund_data, "sector_weightings"):
+                sectors = fund_data.sector_weightings
+                if sectors:
+                    result["sector_breakdown"] = json.dumps(
+                        {k: round(v * 100, 2) for k, v in sectors.items() if v}
+                    )
+        except Exception:
+            pass
+
+        # Market cap breakdown (Large/Mid/Small)
+        try:
+            if fund_data and hasattr(fund_data, "equity_holdings"):
+                eq = fund_data.equity_holdings
+                if eq:
+                    result["cap_breakdown"] = json.dumps({
+                        "large_cap": round(float(eq.get("priceToEarnings", 0)), 2),
+                    })
+        except Exception:
+            pass
+
+        return result
+    except Exception:
+        return {}
+
 
 def _etf_sub(name):
     n = name.upper()
@@ -545,6 +713,20 @@ def render():
                             row["top_holdings"] = json.dumps(holdings)
                         time.sleep(0.08)
 
+                    # Yahoo Finance extended data (sector, cap breakdown, holdings by stock)
+                    if inc_yf_mf:
+                        # Build Yahoo symbol: try scheme_code as Yahoo MF code with suffix
+                        # Yahoo MF codes for India are like "0P0000XVEK" — not numeric AMFI codes
+                        # Best effort: try fund name-based lookup or skip if no match
+                        yf_sym = code + yf_symbol_input.strip()
+                        yf_ext = fetch_mf_yf_details(yf_sym)
+                        if yf_ext:
+                            # Only update fields that YF found and that mfapi didn't already provide
+                            for fld in ("aum","expense_ratio","top_holdings","sector_breakdown"):
+                                if fld in yf_ext and fld not in row:
+                                    row[fld] = yf_ext[fld]
+                        time.sleep(0.3)
+
                     try:
                         sb().table("mutual_funds").update(row).eq("scheme_code", code).execute()
                         ok += 1
@@ -612,77 +794,147 @@ def render():
         # ── Mode 3: Bulk import active only ───────────────────────────
         else:
             st.caption("Downloads AMFI's full list, filters to **active open-ended schemes** only, then imports.")
-            with st.expander("ℹ️ What counts as active?"):
+
+            with st.expander("ℹ️ What counts as active / excluded?"):
                 st.markdown("""
-                - Listed in AMFI NAVAll.txt (live reporting schemes only)
-                - NAV date within last **10 trading days**
-                - Not Segregated Portfolio, FMP, or Interval Fund
+                **Active** = listed in AMFI NAVAll.txt with NAV date within last 10 trading days.
+
+                **Always excluded** (regardless of filters below):
+                - Fixed Maturity Plans (FMP) — closed-ended, fixed tenure
+                - Capital Protection Oriented Schemes — closed-ended
+                - Interval Funds / Interval Plans — limited redemption windows
+                - Segregated Portfolios / Side Pockets — distressed assets
+                - Infrastructure Debt Funds
+                - Matured / Wound-up schemes
                 """)
+
+            st.markdown("**Step 1 — Scheme Type Filters**")
+            fe1, fe2, fe3 = st.columns(3)
+            exc_fof      = fe1.checkbox("Exclude Fund of Funds (FOF)", value=False,
+                                         help="FOF-Domestic can be useful; FOF-Overseas have SEBI limits")
+            exc_overseas = fe2.checkbox("Exclude FOF-Overseas", value=True,
+                                         help="Subject to $7B industry-wide SEBI limit — often suspended")
+            exc_etf_idx  = fe3.checkbox("Exclude ETF/Index Funds", value=True,
+                                         help="These belong in the ETF page, not MF NAV list")
+
+            st.markdown("**Step 2 — Plan Type**")
+            pc1, pc2 = st.columns(2)
+            want_direct  = pc1.checkbox("Direct Plans",  value=True,
+                                         help="No distributor commission — lower TER")
+            want_regular = pc2.checkbox("Regular Plans", value=False,
+                                         help="Higher TER due to distributor trail commission")
+            if not want_direct and not want_regular:
+                st.warning("Select at least one plan type.")
+
+            st.markdown("**Step 3 — Benefit Option**")
+            bc1, bc2, bc3 = st.columns(3)
+            want_growth = bc1.checkbox("Growth",  value=True,
+                                        help="NAV compounds — ideal for long-term wealth creation")
+            want_idcw   = bc2.checkbox("IDCW",    value=False,
+                                        help="Income Distribution cum Capital Withdrawal (formerly Dividend)")
+            want_bonus  = bc3.checkbox("Bonus",   value=False,
+                                        help="Legacy bonus-unit option — mostly phased out")
+
+            # IDCW frequency sub-filter (only shown when IDCW is ticked)
+            idcw_freqs_wanted = set()
+            if want_idcw:
+                st.markdown("↳ **IDCW Frequencies to include:**")
+                if1,if2,if3,if4,if5,if6,if7,if8 = st.columns(8)
+                if if1.checkbox("Daily",        value=False, key="idf_daily"):   idcw_freqs_wanted.add("Daily")
+                if if2.checkbox("Weekly",       value=False, key="idf_weekly"):  idcw_freqs_wanted.add("Weekly")
+                if if3.checkbox("Fortnightly",  value=False, key="idf_ftly"):   idcw_freqs_wanted.add("Fortnightly")
+                if if4.checkbox("Monthly",      value=True,  key="idf_mth"):    idcw_freqs_wanted.add("Monthly")
+                if if5.checkbox("Quarterly",    value=True,  key="idf_qtr"):    idcw_freqs_wanted.add("Quarterly")
+                if if6.checkbox("Half-Yearly",  value=False, key="idf_half"):   idcw_freqs_wanted.add("Half-Yearly")
+                if if7.checkbox("Annual",       value=False, key="idf_ann"):    idcw_freqs_wanted.add("Annual")
+                if if8.checkbox("Flexi/Other",  value=True,  key="idf_flexi"):  idcw_freqs_wanted.add("Flexi")
+                if not idcw_freqs_wanted:
+                    st.warning("Select at least one IDCW frequency.")
+
+            st.markdown("**Step 4 — Additional Filters**")
             c1, c2 = st.columns(2)
-            filt_house = c1.text_input("Filter by AMC", placeholder="SBI, HDFC…", key="bl_amc")
-            filt_cat   = c2.text_input("Filter by category", placeholder="Equity, Debt…", key="bl_cat")
+            filt_house = c1.text_input("Filter by AMC name (optional)", placeholder="SBI, HDFC, Mirae…", key="bl_amc")
+            filt_cat   = c2.text_input("Filter by category keyword (optional)", placeholder="Equity, Debt, Hybrid…", key="bl_cat")
             c3, c4 = st.columns(2)
-            inc_det3 = c3.checkbox("Fetch AUM / expense / exit load", value=True, key="bl_det")
-            inc_ret3 = c4.checkbox("Compute returns from history", value=True, key="bl_ret")
-            max_imp  = st.number_input("Max schemes", min_value=1, max_value=5000, value=300, step=50)
+            inc_det3 = c3.checkbox("Fetch AUM / expense ratio / exit load", value=True, key="bl_det")
+            inc_ret3 = c4.checkbox("Compute returns from NAV history", value=True, key="bl_ret")
+            max_imp  = st.number_input("Max schemes to import", min_value=1, max_value=5000, value=300, step=50)
 
-            # Plan type filter — the most important filter for a clean DB
-            st.markdown("""
-            <div style="background:#0F1117;border:1px solid #252D40;border-radius:7px;
-                padding:.7rem 1rem;margin:.5rem 0;font-size:.79rem;color:#C8D0E0;line-height:1.9">
-                <b>Plan filter (applied during import):</b><br>
-                Each AMFI scheme has up to 4 variants: <b>Direct+Growth</b>, Direct+IDCW,
-                Regular+Growth, Regular+IDCW. Importing all 4 clutters the DB.<br>
-                <span style="color:#2ECC7A">✓ Recommended: Direct+Growth only</span>
-                — lowest TER, long-term wealth creation, one clean row per fund.
-            </div>
-            """, unsafe_allow_html=True)
-            st.markdown("""
-            <div style="background:#0F1117;border:1px solid #252D40;border-radius:7px;
-                padding:.6rem 1rem;margin-bottom:.5rem;font-size:.77rem;color:#C8D0E0">
-                <b>What "annual compounding" means here:</b> Growth plans (NAV grows, no payouts)
-                + Annual IDCW only. Excludes Monthly/Quarterly/Half-Yearly IDCW — those are
-                income-distribution products. All payment options are still available when
-                adding a fund to a portfolio in the Holdings page.
-            </div>
-            """, unsafe_allow_html=True)
-            plan_filter = st.radio("Import plan variants", [
-                "Annual compounding only — Growth + Annual IDCW (recommended)",
-                "Direct + Growth only",
-                "Direct plans only (Growth + Annual IDCW)",
-                "Growth plans only (Direct + Regular)",
-                "All variants (Direct/Regular × Growth/IDCW/All frequencies)",
-            ], key="bl_plan", index=0)
-
-            if st.button("📋 Load Active Scheme List", use_container_width=True, key="amfi_load"):
+            if st.button("📋 Load & Preview Filtered Scheme List", use_container_width=True, key="amfi_load"):
                 with st.spinner("Fetching active codes from AMFI…"):
                     active_codes, active_msg = fetch_active_scheme_codes()
-                st.info(f"AMFI filter: {active_msg}")
+                st.info(f"AMFI active filter: {active_msg}")
 
-                with st.spinner("Fetching scheme list from mfapi…"):
+                with st.spinner("Fetching full scheme list from mfapi…"):
                     all_schemes, serr = fetch_all_amfi_schemes()
-                if serr: st.error(f"mfapi error: {serr}"); return
+                if serr:
+                    st.error(f"mfapi error: {serr}"); return
 
-                schemes = [s for s in all_schemes if str(s.get("schemeCode","")) in active_codes]
+                total_raw = len(all_schemes)
 
-                # Apply plan filter FIRST (most impactful, reduces list by ~75%)
-                _pf = plan_filter
-                if "Annual compounding only" in _pf:
-                    # Growth plans (all) + Annual IDCW only — no sub-annual IDCW
-                    schemes = [s for s in schemes
-                               if _is_annual_compounding(s.get("schemeName",""))]
-                elif "Direct + Growth only" in _pf:
-                    schemes = [s for s in schemes if _is_direct_growth(s.get("schemeName",""))]
-                elif "Direct plans only" in _pf:
-                    n_lo = lambda s: s.get("schemeName","").lower()
-                    schemes = [s for s in schemes
-                               if "direct" in n_lo(s) and _is_annual_compounding(s.get("schemeName",""))]
-                elif "Growth plans only" in _pf:
-                    schemes = [s for s in schemes
-                               if _is_direct_growth(s.get("schemeName",""))
-                               or _is_regular_growth(s.get("schemeName",""))]
-                # else: All variants — no filter
+                # ── Step 1: Active only
+                schemes = [s for s in all_schemes
+                           if str(s.get("schemeCode","")) in active_codes]
+                n_after_active = len(schemes)
 
+                # ── Step 1b: Closed-ended / always-excluded
+                def _is_excluded(name):
+                    n = name.lower()
+                    return any(kw in n for kw in _EXCLUDE_KEYWORDS)
+
+                schemes = [s for s in schemes if not _is_excluded(s.get("schemeName",""))]
+                n_after_excl = len(schemes)
+
+                # ── Step 2: Type filters
+                def _is_fof(name):
+                    n = name.lower()
+                    return "fund of fund" in n or " fof " in n or n.endswith(" fof")
+                def _is_overseas(name):
+                    n = name.lower()
+                    return "overseas" in n or "foreign" in n
+                def _is_etf_idx(name):
+                    n = name.lower()
+                    return any(k in n for k in ("etf","exchange traded","index fund","nifty etf","sensex etf"))
+
+                if exc_overseas:
+                    schemes = [s for s in schemes
+                               if not (_is_fof(s.get("schemeName","")) and _is_overseas(s.get("schemeName","")))]
+                if exc_fof:
+                    schemes = [s for s in schemes if not _is_fof(s.get("schemeName",""))]
+                if exc_etf_idx:
+                    schemes = [s for s in schemes if not _is_etf_idx(s.get("schemeName",""))]
+                n_after_type = len(schemes)
+
+                # ── Step 3: Plan type filter
+                plan_filtered = []
+                for s in schemes:
+                    p = _parse_plan(s.get("schemeName",""))
+                    if p["plan_type"] == "Direct"  and want_direct:  plan_filtered.append(s)
+                    elif p["plan_type"] == "Regular" and want_regular: plan_filtered.append(s)
+                schemes = plan_filtered
+                n_after_plan = len(schemes)
+
+                # ── Step 4: Benefit option filter
+                benefit_filtered = []
+                for s in schemes:
+                    p = _parse_plan(s.get("schemeName",""))
+                    bo = p["benefit_option"]
+                    if bo == "Growth" and want_growth:
+                        benefit_filtered.append(s)
+                    elif bo == "IDCW" and want_idcw:
+                        # Apply IDCW frequency sub-filter if any freqs selected
+                        if idcw_freqs_wanted:
+                            freq = p["idcw_frequency"] or "Flexi"
+                            if freq in idcw_freqs_wanted:
+                                benefit_filtered.append(s)
+                        else:
+                            benefit_filtered.append(s)
+                    elif bo == "Bonus" and want_bonus:
+                        benefit_filtered.append(s)
+                schemes = benefit_filtered
+                n_after_benefit = len(schemes)
+
+                # ── Step 5: Text filters
                 if filt_house.strip():
                     fh = filt_house.strip().lower()
                     schemes = [s for s in schemes if fh in s.get("schemeName","").lower()]
@@ -691,18 +943,44 @@ def render():
                     schemes = [s for s in schemes if fc in s.get("schemeName","").lower()]
                 schemes = schemes[:max_imp]
 
-                st.success(f"**{len(schemes)} active schemes** matched.")
+                # Show filter funnel summary
+                st.markdown(f"""
+                <div style="background:#0F1117;border:1px solid #252D40;border-radius:8px;
+                    padding:.8rem 1.1rem;margin:.6rem 0;font-size:.8rem;color:#C8D0E0;line-height:2">
+                    <b>Filter funnel:</b><br>
+                    All AMFI schemes: <b>{total_raw:,}</b><br>
+                    → Active (NAV within 10 days): <b>{n_after_active:,}</b><br>
+                    → After closed-ended exclusions: <b>{n_after_excl:,}</b><br>
+                    → After type filters (FOF/ETF): <b>{n_after_type:,}</b><br>
+                    → After plan filter (Direct/Regular): <b>{n_after_plan:,}</b><br>
+                    → After benefit filter (Growth/IDCW): <b>{n_after_benefit:,}</b><br>
+                    → After text + max filters: <b style="color:#2ECC7A">{len(schemes):,} schemes ready</b>
+                </div>
+                """, unsafe_allow_html=True)
+
                 if schemes:
                     import pandas as pd
-                    st.dataframe(pd.DataFrame([
-                        {"Code": s["schemeCode"], "Name": s["schemeName"][:70]}
-                        for s in schemes[:10]
-                    ]), use_container_width=True)
-                    if len(schemes) > 10: st.caption(f"…and {len(schemes)-10} more")
+                    # Show richer preview with plan info
+                    preview_rows = []
+                    for s in schemes[:15]:
+                        p = _parse_plan(s.get("schemeName",""))
+                        preview_rows.append({
+                            "Code": s["schemeCode"],
+                            "Name": s["schemeName"][:65],
+                            "Plan": p["plan_type"],
+                            "Option": p["benefit_option"] + (f" {p['idcw_frequency']}" if p["idcw_frequency"] else ""),
+                        })
+                    st.dataframe(pd.DataFrame(preview_rows), use_container_width=True)
+                    if len(schemes) > 15:
+                        st.caption(f"…and {len(schemes)-15} more")
+                elif want_direct or want_regular:
+                    st.warning("No schemes matched. Adjust filters above.")
+
                 st.session_state["_amfi_schemes"] = schemes
 
             if st.session_state.get("_amfi_schemes"):
                 schemes = st.session_state["_amfi_schemes"]
+
                 if st.button(f"⬆️ Import {len(schemes)} Schemes", use_container_width=True, key="do_amfi_import"):
                     prog = st.progress(0.0); status = st.empty()
                     inserted = updated = err = 0

@@ -84,39 +84,62 @@ ETF_FOF_KEYWORDS = [
 def _classify(raw_category: str, raw_sub: str, name: str):
     """
     Returns (display_category, display_sub) for a fund.
-    Uses AMFI scheme_category + scheme_type to classify.
+
+    After the _sebi_normalise fix, stored values are:
+      category    = "Equity" | "Debt" | "Hybrid" | "Solution Oriented" | "ETF" | "Fund of Funds"
+      sub_category = "Large Cap Fund" | "Liquid Fund" | "Aggressive Hybrid Fund" | ...
+                     (extracted from the " - " part of AMFI scheme_category string)
+
+    This function maps those stored values to Qavi display taxonomy.
+    Also handles old stored values like "Equity Scheme - Large Cap Fund" for backward
+    compatibility with already-imported funds.
     """
-    cat_lo = raw_category.lower()
-    sub_lo = raw_sub.lower()
+    cat_lo  = raw_category.lower()
+    sub_lo  = raw_sub.lower()
     name_lo = name.lower()
 
-    # First filter out ETFs and FOFs — they belong in ETF page
+    # Exclude ETFs and FOFs — they belong in the ETF page
+    if cat_lo in ("etf", "fund of funds"):
+        return None, None
     if any(k in name_lo for k in ETF_FOF_KEYWORDS):
-        return None, None  # exclude from MF page
+        return None, None
     if "etf" in cat_lo or "exchange traded" in cat_lo:
         return None, None
+    if "fund of fund" in cat_lo or "fof" in sub_lo:
+        return None, None
 
-    # AMFI category strings begin with type: "Equity Scheme", "Debt Scheme", etc.
+    # ── International / Overseas ─────────────────────────────────────────
+    intl_kw = ("overseas", "international", "global", "us fund", "world", "foreign",
+               "developed market", "emerging market", "nasdaq", "s&p 500", "hang seng")
+    if any(k in name_lo or k in sub_lo for k in intl_kw):
+        return "International", _intl_sub(name_lo)
+
+    # ── Equity ───────────────────────────────────────────────────────────
     if "equity" in cat_lo:
         group_map = SEBI_TAXONOMY["Equity"]
-        # Check for international / overseas
-        if any(k in name_lo or k in sub_lo for k in
-               ("overseas", "international", "global", "us fund", "world", "foreign",
-                "developed market", "emerging market")):
-            return "International", _intl_sub(name_lo)
-        # Match sub_category
+        # sub_lo now contains "large cap fund", "mid cap fund" etc — match directly
         for key, (cat, sub) in group_map.items():
-            if key.lower() in sub_lo or key.lower() in name_lo:
+            if key.lower() in sub_lo:
+                return cat, sub
+        # Fallback: try name
+        for key, (cat, sub) in group_map.items():
+            if key.lower() in name_lo:
                 return cat, sub
         return "Equity India", "Equity Other"
 
+    # ── Debt ─────────────────────────────────────────────────────────────
     if "debt" in cat_lo:
         group_map = SEBI_TAXONOMY["Debt"]
         for key, (cat, sub) in group_map.items():
-            if key.lower() in sub_lo or key.lower() in raw_sub.lower():
+            if key.lower() in sub_lo:
+                return cat, sub
+        # Some debt fund names contain the sub-type
+        for key, (cat, sub) in group_map.items():
+            if key.lower() in name_lo:
                 return cat, sub
         return "Debt", "Debt Other"
 
+    # ── Hybrid ───────────────────────────────────────────────────────────
     if "hybrid" in cat_lo:
         group_map = SEBI_TAXONOMY["Hybrid"]
         for key, (cat, sub) in group_map.items():
@@ -124,16 +147,41 @@ def _classify(raw_category: str, raw_sub: str, name: str):
                 return cat, sub
         return "Hybrid", "Hybrid Other"
 
+    # ── Solution Oriented ────────────────────────────────────────────────
     if "solution" in cat_lo:
-        if "retire" in sub_lo: return "Solution Oriented", "Retirement Fund"
-        if "child" in sub_lo:  return "Solution Oriented", "Children's Fund"
+        if "retire" in sub_lo or "retire" in name_lo: return "Solution Oriented", "Retirement Fund"
+        if "child"  in sub_lo or "child"  in name_lo: return "Solution Oriented", "Children's Fund"
         return "Solution Oriented", "Other"
 
-    if "fund of fund" in cat_lo or "fof" in sub_lo:
-        return None, None  # exclude — these are typically FOFs
-
+    # ── Other / catch-all ────────────────────────────────────────────────
     if "other" in cat_lo:
-        return None, None  # catch-all exclusion
+        return None, None
+
+    # ── Backward compat: old raw AMFI strings still in DB ────────────────
+    # e.g. category = "Equity Scheme - Large Cap Fund" (stored before the fix)
+    if "equity scheme" in cat_lo:
+        group_map = SEBI_TAXONOMY["Equity"]
+        combined  = cat_lo + " " + sub_lo + " " + name_lo
+        if any(k in name_lo or k in sub_lo for k in intl_kw):
+            return "International", _intl_sub(name_lo)
+        for key, (cat, sub) in group_map.items():
+            if key.lower() in combined:
+                return cat, sub
+        return "Equity India", "Equity Other"
+    if "debt scheme" in cat_lo:
+        group_map = SEBI_TAXONOMY["Debt"]
+        combined  = cat_lo + " " + sub_lo
+        for key, (cat, sub) in group_map.items():
+            if key.lower() in combined:
+                return cat, sub
+        return "Debt", "Debt Other"
+    if "hybrid scheme" in cat_lo:
+        group_map = SEBI_TAXONOMY["Hybrid"]
+        combined  = cat_lo + " " + sub_lo + " " + name_lo
+        for key, (cat, sub) in group_map.items():
+            if key.lower() in combined:
+                return cat, sub
+        return "Hybrid", "Hybrid Other"
 
     return "Other", raw_sub or "Other"
 

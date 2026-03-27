@@ -418,11 +418,15 @@ def render():
             navigate("market_auto_fetch")
         st.markdown("")
         _hint(
-            "<b>Symbol / Code:</b> <code>symbol, scheme_code, amfi_code</code><br>"
-            "<b>ISIN:</b> <code>isin, isin_number</code> (optional — stored for reference)<br>"
-            "<b>NAV:</b> <code>nav, net_asset_value, repurchase_price, sale_price</code><br>"
+            "<b>AMFI Scheme Code:</b> <code>scheme_code, symbol, amfi_code, code</code>"
+            " — numeric code from AMFI (e.g. 119598). Used as the unique identifier.<br>"
+            "<b>Scheme Name (optional):</b> <code>scheme_name, name, fund_name</code>"
+            " — stored as fund name; new schemes are auto-registered.<br>"
+            "<b>ISIN (optional):</b> <code>isin, isin_number</code> — stored for reference.<br>"
+            "<b>NAV:</b> <code>nav, net_asset_value, Net Asset Value, repurchase_price, sale_price</code><br>"
             "<b>Prev NAV (optional):</b> <code>prev_nav, previous_nav</code><br>"
-            "<b>Scheme Name (optional):</b> <code>scheme_name, name, fund_name</code> — registers new funds"
+            "<b style=\'color:#2ECC7A\'>AMFI NAVAll.txt</b> columns are auto-detected:"
+            " Scheme Code → symbol, Net Asset Value → nav, Repurchase Price → prev_nav."
         )
         mf_date = _date_pick("mf_date")
         mf_file = st.file_uploader("CSV / Excel", type=["csv","xlsx","xls"], key="mf_up")
@@ -432,7 +436,7 @@ def render():
             else:
                 df     = _norm(df)
                 sym_c  = _col(df,"symbol","scheme_code","amfi_code","code")
-                nav_c  = _col(df,"nav","net_asset_value","nav_value","repurchase_price","sale_price")
+                nav_c  = _col(df,"nav","net_asset_value","nav_value","repurchase_price","sale_price","net_asset_val","netassetvalue")
                 prev_c = _col(df,"prev_nav","previous_nav")
                 isin_c = _col(df,"isin","isin_number","isin_div_payout_isin_growth",
                                       "isin_div_reinvestment","isin1","isin2")
