@@ -418,9 +418,11 @@ def render():
             navigate("market_auto_fetch")
         st.markdown("")
         _hint(
-            "<b>Symbol:</b> <code>symbol, scheme_code, amfi_code</code><br>"
-            "<b>NAV:</b> <code>nav, net_asset_value</code><br>"
-            "<b>Prev NAV (optional):</b> <code>prev_nav, previous_nav</code>"
+            "<b>Symbol / Code:</b> <code>symbol, scheme_code, amfi_code</code><br>"
+            "<b>ISIN:</b> <code>isin, isin_number</code> (optional — stored for reference)<br>"
+            "<b>NAV:</b> <code>nav, net_asset_value, repurchase_price, sale_price</code><br>"
+            "<b>Prev NAV (optional):</b> <code>prev_nav, previous_nav</code><br>"
+            "<b>Scheme Name (optional):</b> <code>scheme_name, name, fund_name</code> — registers new funds"
         )
         mf_date = _date_pick("mf_date")
         mf_file = st.file_uploader("CSV / Excel", type=["csv","xlsx","xls"], key="mf_up")
@@ -428,53 +430,100 @@ def render():
             df, err = _read(mf_file)
             if err: st.error(err)
             else:
-                df    = _norm(df)
-                sym_c = _col(df,"symbol","scheme_code","amfi_code")
-                nav_c = _col(df,"nav","net_asset_value","nav_value")
-                prev_c= _col(df,"prev_nav","previous_nav")
+                df     = _norm(df)
+                sym_c  = _col(df,"symbol","scheme_code","amfi_code","code")
+                nav_c  = _col(df,"nav","net_asset_value","nav_value","repurchase_price","sale_price")
+                prev_c = _col(df,"prev_nav","previous_nav")
+                isin_c = _col(df,"isin","isin_number","isin_div_payout_isin_growth",
+                                      "isin_div_reinvestment","isin1","isin2")
+                name_c = _col(df,"scheme_name","schemename","name","fund_name")
+
                 if sym_c is None or nav_c is None:
-                    st.error("❌ Symbol or NAV column not found.")
+                    st.error("❌ Symbol/scheme_code or NAV column not found.")
                 else:
-                    st.caption(f"{len(df):,} rows detected")
+                    isin_note = f" · ISIN: <code>{isin_c.name}</code>" if isin_c is not None else " · No ISIN column"
+                    st.caption(f"{len(df):,} rows detected{isin_note}")
                     st.dataframe(df.head(5), use_container_width=True)
                     if st.button("⬆️ Upload", use_container_width=True, key="do_mf"):
-                        now     = datetime.now().isoformat()
-                        nav_dt  = str(mf_date)
-                        count = errs = 0
+                        now    = datetime.now().isoformat()
+                        nav_dt = str(mf_date)
+                        count = errs = new_count = 0
                         prog  = st.progress(0.0, text="Uploading MF NAVs…")
                         total_r = len(df)
-                        # MFs use update (not upsert) so must loop — but batch the DB reads
-                        # First: get all existing NAVs in one query
+                        # Batch-fetch existing symbol → row map
                         try:
-                            existing = {r["symbol"]:r["nav"]
-                                       for r in sb().table("mutual_funds").select("symbol,nav").execute().data or []}
-                        except: existing = {}
+                            existing_map = {
+                                r["symbol"]: r
+                                for r in sb().table("mutual_funds")
+                                              .select("symbol,nav,isin,scheme_code")
+                                              .execute().data or []
+                            }
+                        except:
+                            existing_map = {}
                         update_rows = []
+                        new_rows    = []
                         for i in range(total_r):
                             sym = str(sym_c.iloc[i]).strip().upper()
                             nav = _f(nav_c.iloc[i])
                             if not sym or nav <= 0: continue
-                            prev = _f(prev_c.iloc[i], nav) if prev_c is not None else existing.get(sym, nav)
+                            prev = _f(prev_c.iloc[i], nav) if prev_c is not None else                                    existing_map.get(sym, {}).get("nav", nav)
                             chg  = round(((nav-prev)/prev*100),4) if prev else 0
-                            update_rows.append((sym, nav, prev, chg))
-                        # Execute updates in groups of 50 to show progress
-                        GROUP = 50
-                        for gi, start in enumerate(range(0, len(update_rows), GROUP)):
+                            isin = str(isin_c.iloc[i]).strip() if isin_c is not None else ""
+                            isin = "" if isin.lower() in ("nan","none","") else isin
+                            name = str(name_c.iloc[i]).strip() if name_c is not None else ""
+                            name = "" if name.lower() in ("nan","none","") else name
+
+                            upd = {
+                                "nav": nav, "prev_nav": prev, "change_pct": chg,
+                                "nav_date": nav_dt, "last_updated": now,
+                            }
+                            if isin: upd["isin"] = isin
+                            if name: upd["name"] = name
+
+                            if sym in existing_map:
+                                update_rows.append((sym, upd))
+                            else:
+                                new_rows.append({
+                                    "symbol":      sym,
+                                    "scheme_code": sym.replace("MF","") if sym.startswith("MF") else sym,
+                                    "name":        name or sym,
+                                    "isin":        isin,
+                                    "nav":         nav,
+                                    "prev_nav":    prev,
+                                    "change_pct":  chg,
+                                    "nav_date":    nav_dt,
+                                    "last_updated": now,
+                                })
+
+                        GROUP  = 50
+                        all_ops = max(len(update_rows) + len(new_rows), 1)
+                        for start in range(0, len(update_rows), GROUP):
                             chunk = update_rows[start:start+GROUP]
-                            for sym, nav, prev, chg in chunk:
+                            for sym, upd in chunk:
                                 try:
-                                    sb().table("mutual_funds").update({
-                                        "nav":nav,"prev_nav":prev,"change_pct":chg,
-                                        "nav_date":nav_dt,"last_updated":now,
-                                    }).eq("symbol",sym).execute()
+                                    sb().table("mutual_funds").update(upd).eq("symbol",sym).execute()
                                     count += 1
                                 except: errs += 1
-                            frac = min((start+GROUP)/max(len(update_rows),1), 1.0)
-                            prog.progress(frac, text=f"MF NAVs — {min(start+GROUP,len(update_rows))}/{len(update_rows)}")
+                            frac = min((start+GROUP)/all_ops, 0.85)
+                            prog.progress(frac, text=f"Updating — {min(start+GROUP,len(update_rows))}/{len(update_rows)}")
+
+                        if new_rows:
+                            prog.progress(0.88, text=f"Registering {len(new_rows)} new schemes…")
+                            for j in range(0, len(new_rows), 200):
+                                try:
+                                    sb().table("mutual_funds").upsert(
+                                        new_rows[j:j+200], on_conflict="symbol"
+                                    ).execute()
+                                    new_count += len(new_rows[j:j+200])
+                                except: errs += len(new_rows[j:j+200])
+
                         prog.progress(1.0, text="Done ✓")
                         clear_market_cache()
-                        st.success(f"✅ {count} MF NAVs updated. {f'({errs} skipped)' if errs else ''}")
-
+                        st.success(
+                            f"✅ {count} NAVs updated"
+                            f"{f' · {new_count} new schemes registered' if new_count else ''}"
+                            f"{f' · ({errs} errors)' if errs else ''}"
+                        )
     # ── FD RATES ─────────────────────────────────────────────────────────
     with tab4:
         st.markdown("#### FD Interest Rates")
