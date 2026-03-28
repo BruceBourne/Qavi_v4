@@ -56,7 +56,7 @@ HERO_CARD = {
     ),
 }
 
-_BF = "'Palatino Linotype','Book Antiqua',Georgia,serif"
+_BF = "'Palatino Linotype','Palatino','Book Antiqua','URW Palladio L',Georgia,serif"
 
 
 def _fcard(icon, title, text):
