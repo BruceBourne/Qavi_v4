@@ -7,6 +7,26 @@ def inject_styles():
     <style>
     @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700&family=Inter:wght@300;400;500;600&display=swap');
 
+    /* Palatino Linotype italic — system font with safe fallback chain */
+    @font-face {
+        font-family: 'QaviBrand';
+        src: local('Palatino Linotype'),
+             local('Palatino-Linotype'),
+             local('Book Antiqua'),
+             local('Georgia');
+        font-style: italic;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: 'QaviBrand';
+        src: local('Palatino Linotype'),
+             local('Palatino-Linotype'),
+             local('Book Antiqua'),
+             local('Georgia');
+        font-style: italic;
+        font-weight: 700;
+    }
+
     :root {
         --bg:#08090C; --bg2:#0F1117; --surface:#161B27; --surface2:#1E2535;
         --border:#252D40; --border2:#2E3850; --text:#F0F4FF; --text2:#8892AA;
@@ -17,7 +37,7 @@ def inject_styles():
     .stApp{background:var(--bg)!important;}
     /* Performance: contain heavy renders */
     .block-container{padding:1.2rem 2rem 4rem!important;max-width:1380px;contain:layout;}
-    h1,h2,h3{font-family:'Cinzel',serif!important;letter-spacing:.02em;}
+    h1,h2,h3{font-family:'QaviBrand','Palatino Linotype','Book Antiqua',Georgia,serif!important;font-style:italic;letter-spacing:.02em;}
 
     /* Buttons — hardware-accelerated transitions only */
     .stButton>button{
@@ -76,10 +96,11 @@ def inject_styles():
     .stRadio>div{gap:.5rem!important;}
     .stRadio [data-testid="stMarkdownContainer"] p{font-size:.88rem!important;}
 
-    /* NAV brand — Cinzel gold */
+    /* NAV brand — Palatino Linotype italic, gold gradient */
     .nav-brand{
-        font-family:'Cinzel',serif;font-size:1.45rem;font-weight:700;
-        letter-spacing:.1em;
+        font-family:'QaviBrand','Palatino Linotype','Book Antiqua',Georgia,serif;
+        font-style:italic;font-size:1.45rem;font-weight:700;
+        letter-spacing:.06em;
         background:linear-gradient(120deg,#F8EDD4 20%,#D4AF6A 50%,#F8EDD4 80%);
         -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
     }
@@ -87,10 +108,10 @@ def inject_styles():
 
     .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
           padding:1.3rem 1.5rem;margin-bottom:.75rem;}
-    .card-title{font-family:'Cinzel',serif;font-size:1rem;letter-spacing:.04em;color:var(--text);margin:0 0 .3rem 0;}
+    .card-title{font-family:'QaviBrand','Palatino Linotype','Book Antiqua',Georgia,serif;font-style:italic;font-size:1rem;letter-spacing:.02em;color:var(--text);margin:0 0 .3rem 0;}
     .card-sub{font-size:.8rem;color:var(--text2);margin:0;line-height:1.5;}
 
-    .page-title{font-family:'Cinzel',serif;font-size:1.7rem;letter-spacing:.04em;color:var(--text);margin-bottom:.15rem;}
+    .page-title{font-family:'QaviBrand','Palatino Linotype','Book Antiqua',Georgia,serif;font-style:italic;font-size:1.7rem;letter-spacing:.02em;color:var(--text);margin-bottom:.15rem;}
     .page-sub{font-size:.84rem;color:var(--text2);margin-bottom:1.2rem;}
     .section-label{font-size:.68rem;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.6rem;}
     .divider{border:none;border-top:1px solid var(--border);margin:.4rem 0;}
