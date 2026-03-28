@@ -38,6 +38,98 @@ def _classify_etf(name: str) -> str:
             return sub
     return "Index ETF"
 
+
+# ── MF CATEGORY CLASSIFIER (name-based) ──────────────────────────────────
+def _classify_mf_cat(name: str) -> str:
+    """Classify MF top-level category from fund name."""
+    n = name.lower()
+    # Debt indicators
+    if any(k in n for k in ("liquid fund","overnight","ultra short","low duration",
+                             "short duration","medium duration","long duration",
+                             "dynamic bond","corporate bond","banking and psu",
+                             "banking & psu","credit risk","gilt","floater",
+                             "money market","debt fund")):
+        return "Debt"
+    # Hybrid indicators
+    if any(k in n for k in ("aggressive hybrid","conservative hybrid",
+                             "balanced advantage","multi asset","arbitrage fund",
+                             "equity savings","hybrid fund")):
+        return "Hybrid"
+    # Solution Oriented
+    if any(k in n for k in ("retirement fund","children","child care")):
+        return "Solution Oriented"
+    # FOF
+    if "fund of fund" in n or " fof" in n:
+        return "Fund of Funds"
+    # Default: Equity
+    return "Equity"
+
+def _classify_mf_sub(name: str, cat: str) -> str:
+    """Classify MF sub-category from fund name + category."""
+    n = name.lower()
+    # ── Equity sub-categories ──
+    if cat == "Equity":
+        if "large cap" in n or "bluechip" in n or "blue chip" in n or "large-cap" in n:   return "Large Cap Fund"
+        if "mid cap" in n or "midcap" in n or "mid-cap" in n:                              return "Mid Cap Fund"
+        if "small cap" in n or "smallcap" in n or "small-cap" in n:                       return "Small Cap Fund"
+        if "large & mid" in n or "large and mid" in n or "large & mid" in n:              return "Large & Mid Cap Fund"
+        if "flexi cap" in n or "flexicap" in n or "flexi-cap" in n:                       return "Flexi Cap Fund"
+        if "multi cap" in n or "multicap" in n or "multi-cap" in n:                       return "Multi Cap Fund"
+        if "focused" in n:                                                                  return "Focused Fund"
+        if "elss" in n or "tax sav" in n or "tax-sav" in n:                               return "ELSS"
+        if "dividend yield" in n:                                                           return "Dividend Yield Fund"
+        if "value fund" in n or ("value" in n and "fund" in n):                           return "Value Fund"
+        if "contra" in n:                                                                   return "Contra Fund"
+        if any(k in n for k in ("sector","thematic","psu fund","infra fund","pharma fund",
+                                 "it fund","banking fund","fmcg","energy","consumption",
+                                 "mnc","international","global","overseas","us fund",
+                                 "nifty","sensex","index")):                                return "Sectoral/Thematic"
+        return "Equity Other"
+    # ── Debt sub-categories ──
+    if cat == "Debt":
+        if "overnight" in n:                                      return "Overnight Fund"
+        if "liquid" in n:                                         return "Liquid Fund"
+        if "ultra short" in n:                                    return "Ultra Short Duration Fund"
+        if "low duration" in n:                                   return "Low Duration Fund"
+        if "short duration" in n:                                 return "Short Duration Fund"
+        if "medium to long" in n or "medium-to-long" in n:       return "Medium to Long Duration Fund"
+        if "medium duration" in n:                                return "Medium Duration Fund"
+        if "long duration" in n:                                  return "Long Duration Fund"
+        if "dynamic bond" in n:                                   return "Dynamic Bond"
+        if "corporate bond" in n:                                 return "Corporate Bond Fund"
+        if "banking and psu" in n or "banking & psu" in n:       return "Banking and PSU Fund"
+        if "credit risk" in n:                                    return "Credit Risk Fund"
+        if "gilt with 10" in n or "10 year" in n:                return "Gilt Fund (10Y)"
+        if "gilt" in n:                                           return "Gilt Fund"
+        if "floater" in n:                                        return "Floater Fund"
+        if "money market" in n:                                   return "Money Market Fund"
+        return "Debt Other"
+    # ── Hybrid sub-categories ──
+    if cat == "Hybrid":
+        if "aggressive hybrid" in n:                              return "Aggressive Hybrid Fund"
+        if "conservative hybrid" in n:                            return "Conservative Hybrid Fund"
+        if "balanced advantage" in n or "dynamic asset" in n:    return "Balanced Advantage (BAF)"
+        if "multi asset" in n:                                    return "Multi Asset Allocation"
+        if "arbitrage" in n:                                      return "Arbitrage Fund"
+        if "equity savings" in n:                                 return "Equity Savings"
+        return "Hybrid Other"
+    # ── Solution Oriented ──
+    if cat == "Solution Oriented":
+        if "retirement" in n:  return "Retirement Fund"
+        if "child" in n:       return "Children's Fund"
+        return "Solution Oriented"
+    return ""
+
+def _parse_mf_plan_type(name: str) -> str:
+    n = name.lower()
+    return "Direct" if "direct" in n else "Regular"
+
+def _parse_mf_benefit(name: str) -> str:
+    n = name.lower()
+    if "idcw" in n or ("dividend" in n and "yield" not in n):
+        return "IDCW"
+    return "Growth"
+
 # ── FILE READING ──────────────────────────────────────────────────────────
 
 def _read(f):
@@ -483,20 +575,34 @@ def render():
                             }
                             if isin: upd["isin"] = isin
                             if name: upd["name"] = name
-
+                            # Re-classify if currently in "Other" or blank
                             if sym in existing_map:
+                                ex = existing_map[sym]
+                                if not ex.get("category") or ex.get("category") in ("Other",""):
+                                    fund_name = name or ex.get("name","") or sym
+                                    upd["category"]    = _classify_mf_cat(fund_name)
+                                    upd["sub_category"]= _classify_mf_sub(fund_name, upd["category"])
                                 update_rows.append((sym, upd))
                             else:
+                                fund_name  = name or sym
+                                mf_cat     = _classify_mf_cat(fund_name)
+                                mf_sub     = _classify_mf_sub(fund_name, mf_cat)
+                                mf_plan    = _parse_mf_plan_type(fund_name)
+                                mf_benefit = _parse_mf_benefit(fund_name)
                                 new_rows.append({
-                                    "symbol":      sym,
-                                    "scheme_code": sym.replace("MF","") if sym.startswith("MF") else sym,
-                                    "name":        name or sym,
-                                    "isin":        isin,
-                                    "nav":         nav,
-                                    "prev_nav":    prev,
-                                    "change_pct":  chg,
-                                    "nav_date":    nav_dt,
-                                    "last_updated": now,
+                                    "symbol":         sym,
+                                    "scheme_code":    sym.replace("MF","") if sym.startswith("MF") else sym,
+                                    "name":           fund_name,
+                                    "isin":           isin,
+                                    "nav":            nav,
+                                    "prev_nav":       prev,
+                                    "change_pct":     chg,
+                                    "nav_date":       nav_dt,
+                                    "last_updated":   now,
+                                    "category":       mf_cat,
+                                    "sub_category":   mf_sub,
+                                    "plan_type":      mf_plan,
+                                    "benefit_option": mf_benefit,
                                 })
 
                         GROUP  = 50
