@@ -5,10 +5,18 @@ import streamlit as st
 def inject_styles():
     st.markdown("""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600;1,700&family=Inter:wght@300;400;500;600&display=swap');
-    /* Cormorant Garamond Italic = closest web font to Palatino Linotype italic */
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700&family=Inter:wght@300;400;500;600&display=swap');
 
-    
+    /* Palatino Linotype — brand name only */
+    .qavi-brand{
+        font-family:'Palatino Linotype','Book Antiqua',Palatino,serif;
+        font-style:italic;font-weight:400;font-size:2.6rem;
+        letter-spacing:.06em;
+        background:linear-gradient(120deg,#F8EDD4 20%,#D4AF6A 50%,#F8EDD4 80%);
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+        line-height:1;display:block;
+    }
+
     :root {
         --bg:#08090C; --bg2:#0F1117; --surface:#161B27; --surface2:#1E2535;
         --border:#252D40; --border2:#2E3850; --text:#F0F4FF; --text2:#8892AA;
@@ -19,7 +27,7 @@ def inject_styles():
     .stApp{background:var(--bg)!important;}
     /* Performance: contain heavy renders */
     .block-container{padding:1.2rem 2rem 4rem!important;max-width:1380px;contain:layout;}
-    h1,h2,h3{font-family:'Cormorant Garamond','Palatino Linotype','Palatino','Book Antiqua',Georgia,serif!important;font-style:italic;letter-spacing:.02em;}
+    h1,h2,h3{font-family:'Cinzel',serif!important;letter-spacing:.02em;}
 
     /* Buttons — hardware-accelerated transitions only */
     .stButton>button{
@@ -78,22 +86,44 @@ def inject_styles():
     .stRadio>div{gap:.5rem!important;}
     .stRadio [data-testid="stMarkdownContainer"] p{font-size:.88rem!important;}
 
-    /* NAV brand — Palatino Linotype italic, gold gradient */
+    /* NAV brand — Palatino Linotype Italic gold */
     .nav-brand{
-        font-family:'Cormorant Garamond','Palatino Linotype','Palatino','Book Antiqua',Georgia,serif;
-        font-style:italic;font-size:1.45rem;font-weight:700;
-        letter-spacing:.06em;
+        font-family:'Palatino Linotype','Book Antiqua',Palatino,serif;
+        font-style:italic;font-size:1.55rem;font-weight:400;
+        letter-spacing:.08em;
         background:linear-gradient(120deg,#F8EDD4 20%,#D4AF6A 50%,#F8EDD4 80%);
         -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
     }
     .nav-divider{border:none;border-top:1px solid var(--border);margin:.3rem 0 1rem 0;}
 
+    /* ── LOGIN PAGE ── */
+    .login-wrap{
+        display:flex;flex-direction:column;align-items:center;
+        justify-content:center;min-height:72vh;padding:2rem 1rem;
+    }
+    .login-brand{
+        font-family:'Palatino Linotype','Book Antiqua',Palatino,serif;
+        font-style:italic;font-weight:400;font-size:3.2rem;letter-spacing:.08em;
+        background:linear-gradient(120deg,#F8EDD4 15%,#D4AF6A 50%,#F8EDD4 85%);
+        -webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;
+        text-align:center;margin-bottom:.2rem;line-height:1.1;
+    }
+    .login-tagline{
+        font-size:.82rem;color:var(--text2);letter-spacing:.14em;
+        text-transform:uppercase;text-align:center;margin-bottom:2.4rem;
+    }
+    .login-card{
+        background:var(--surface);border:1px solid var(--border);
+        border-radius:18px;padding:2.2rem 2rem;width:100%;max-width:420px;
+        box-shadow:0 8px 40px rgba(0,0,0,.45);
+    }
+
     .card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
           padding:1.3rem 1.5rem;margin-bottom:.75rem;}
-    .card-title{font-family:'Cormorant Garamond','Palatino Linotype','Palatino','Book Antiqua',Georgia,serif;font-style:italic;font-size:1rem;letter-spacing:.02em;color:var(--text);margin:0 0 .3rem 0;}
+    .card-title{font-family:'Cinzel',serif;font-size:1rem;letter-spacing:.04em;color:var(--text);margin:0 0 .3rem 0;}
     .card-sub{font-size:.8rem;color:var(--text2);margin:0;line-height:1.5;}
 
-    .page-title{font-family:'Cormorant Garamond','Palatino Linotype','Palatino','Book Antiqua',Georgia,serif;font-style:italic;font-size:1.7rem;letter-spacing:.02em;color:var(--text);margin-bottom:.15rem;}
+    .page-title{font-family:'Cinzel',serif;font-size:1.7rem;letter-spacing:.04em;color:var(--text);margin-bottom:.15rem;}
     .page-sub{font-size:.84rem;color:var(--text2);margin-bottom:1.2rem;}
     .section-label{font-size:.68rem;font-weight:600;color:var(--text3);letter-spacing:.1em;text-transform:uppercase;margin-bottom:.6rem;}
     .divider{border:none;border-top:1px solid var(--border);margin:.4rem 0;}
