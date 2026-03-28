@@ -30,7 +30,7 @@ def render():
 
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700;900&family=Cinzel+Decorative:wght@400;700&family=Inter:wght@300;400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600;1,700&family=Cormorant:ital,wght@1,700&family=Inter:wght@300;400;500;600&display=swap');
     @keyframes fadeUp  {{ from{{opacity:0;transform:translateY(28px)}} to{{opacity:1;transform:translateY(0)}} }}
     @keyframes shimmer {{ 0%{{background-position:-300% center}} 100%{{background-position:300% center}} }}
     @keyframes glow    {{ 0%,100%{{opacity:.85}} 50%{{opacity:1}} }}
@@ -43,7 +43,7 @@ def render():
          rgba(8,9,12,.75) 85%,rgba(8,9,12,1) 100%);}}
     .hc{{position:relative;z-index:2;text-align:center;padding:0 1rem;animation:fadeUp .9s ease both;}}
 
-    .qw{{font-family:'Cinzel Decorative','Cinzel',serif;font-weight:700;
+    .qw{{font-family:'Cormorant Garamond','Cormorant','Palatino Linotype',Georgia,serif;font-weight:700;
          font-size:clamp(4.5rem,14vw,10rem);line-height:1;letter-spacing:.1em;
          background:linear-gradient(135deg,#F8EDD4 0%,#D4AF6A 28%,#F8EDD4 50%,#C5922E 72%,#F8EDD4 100%);
          background-size:300% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
@@ -62,7 +62,7 @@ def render():
          border-radius:14px;padding:1.6rem;transition:border-color .2s,transform .2s;}}
     .fc:hover{{border-color:#D4AF6A;transform:translateY(-2px);}}
     .fi{{font-size:1.5rem;margin-bottom:.65rem;}}
-    .ft2{{font-family:'Cinzel',serif;font-size:.88rem;letter-spacing:.07em;
+    .ft2{{font-family:'Cormorant Garamond','Palatino Linotype',Georgia,serif;font-size:.88rem;letter-spacing:.07em;
           color:#F8EDD4;margin-bottom:.3rem;font-weight:600;}}
     .fd{{font-size:.8rem;color:#6B778E;line-height:1.7;}}
     </style>
