@@ -30,7 +30,7 @@ def render():
 
     st.markdown(f"""
     <style>
-    @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400;1,600;1,700&family=Cormorant:ital,wght@1,700&family=Inter:wght@300;400;500;600&display=swap');
+    @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Cinzel+Decorative:wght@400;700&family=Inter:wght@300;400;500;600&display=swap');
     @keyframes fadeUp  {{ from{{opacity:0;transform:translateY(28px)}} to{{opacity:1;transform:translateY(0)}} }}
     @keyframes shimmer {{ 0%{{background-position:-300% center}} 100%{{background-position:300% center}} }}
     @keyframes glow    {{ 0%,100%{{opacity:.85}} 50%{{opacity:1}} }}
@@ -43,8 +43,9 @@ def render():
          rgba(8,9,12,.75) 85%,rgba(8,9,12,1) 100%);}}
     .hc{{position:relative;z-index:2;text-align:center;padding:0 1rem;animation:fadeUp .9s ease both;}}
 
-    .qw{{font-family:'Cormorant Garamond','Cormorant','Palatino Linotype',Georgia,serif;font-weight:700;
-         font-size:clamp(4.5rem,14vw,10rem);line-height:1;letter-spacing:.1em;
+    .qw{{font-family:'Palatino Linotype','Book Antiqua',Palatino,Georgia,serif;
+         font-style:italic;font-weight:400;
+         font-size:clamp(4.5rem,14vw,10rem);line-height:1;letter-spacing:.08em;
          background:linear-gradient(135deg,#F8EDD4 0%,#D4AF6A 28%,#F8EDD4 50%,#C5922E 72%,#F8EDD4 100%);
          background-size:300% auto;-webkit-background-clip:text;-webkit-text-fill-color:transparent;
          background-clip:text;animation:shimmer 5s linear infinite,glow 3s ease-in-out infinite;
@@ -55,16 +56,25 @@ def render():
     .qd{{font-family:'Inter',sans-serif;font-size:1rem;color:rgba(248,237,212,.7);
          max-width:500px;margin:0 auto 0;line-height:1.85;animation:fadeUp .9s ease .45s both;}}
 
-    .feats{{display:grid;grid-template-columns:repeat(3,1fr);gap:1.1rem;
-            margin:3rem 0 1.5rem;animation:fadeUp 1s ease .65s both;}}
+    .feats{{display:grid;grid-template-columns:repeat(2,1fr);gap:1rem;
+            margin:3rem 0 1rem;animation:fadeUp 1s ease .65s both;}}
     @media(max-width:760px){{.feats{{grid-template-columns:1fr;}}}}
     .fc{{background:linear-gradient(145deg,#0F1117,#161B27);border:1px solid #1E2535;
          border-radius:14px;padding:1.6rem;transition:border-color .2s,transform .2s;}}
     .fc:hover{{border-color:#D4AF6A;transform:translateY(-2px);}}
-    .fi{{font-size:1.5rem;margin-bottom:.65rem;}}
-    .ft2{{font-family:'Cormorant Garamond','Palatino Linotype',Georgia,serif;font-size:.88rem;letter-spacing:.07em;
-          color:#F8EDD4;margin-bottom:.3rem;font-weight:600;}}
-    .fd{{font-size:.8rem;color:#6B778E;line-height:1.7;}}
+    .fi{{font-size:1.4rem;margin-bottom:.6rem;}}
+    .ft2{{font-family:'Cinzel',serif;font-size:.86rem;letter-spacing:.07em;
+          color:#F8EDD4;margin-bottom:.4rem;font-weight:600;}}
+    .fd{{font-size:.79rem;color:#6B778E;line-height:1.72;}}
+    .fhero{{background:linear-gradient(135deg,#0C1020 0%,#0A0D18 60%,#080B14 100%);
+            border:1px solid #2E3850;border-radius:14px;padding:2rem 2.2rem;
+            margin-top:.8rem;margin-bottom:1.5rem;position:relative;overflow:hidden;
+            animation:fadeUp 1s ease .8s both;}}
+    .fhero::before{{content:'';position:absolute;top:0;left:0;right:0;height:2px;
+            background:linear-gradient(90deg,transparent,#D4AF6A 40%,#4F7EFF 70%,transparent);}}
+    .fhero-title{{font-family:'Cinzel',serif;font-size:1.05rem;letter-spacing:.06em;
+            color:#F8EDD4;margin-bottom:.75rem;font-weight:600;}}
+    .fhero-text{{font-size:.84rem;color:#6B778E;line-height:1.85;}}
     </style>
 
     <div class="hw">
@@ -86,15 +96,30 @@ def render():
 
     st.markdown("""
     <div class="feats">
-        <div class="fc"><div class="fi">📊</div>
-            <div class="ft2">Complete Coverage</div>
-            <p class="fd">Equities, mutual funds, ETFs, bonds, government schemes, bank FDs, gold and silver — everything in one view.</p></div>
-        <div class="fc"><div class="fi">🔬</div>
-            <div class="ft2">Deep Analytics</div>
-            <p class="fd">P&L per holding, allocation breakdowns, 1D to 5Y return history, Sharpe ratio and key performance ratios.</p></div>
-        <div class="fc"><div class="fi">🔒</div>
-            <div class="ft2">Private by Design</div>
-            <p class="fd">Your data is encrypted end-to-end. Invite-only platform. Private portfolios visible only to you.</p></div>
+        <div class="fc">
+            <div class="fi">◈</div>
+            <div class="ft2">Unified Wealth View</div>
+            <p class="fd">From equities and mutual funds to real estate, gold, and fixed deposits — track every asset in one place and see your true net worth without fragmentation.</p>
+        </div>
+        <div class="fc">
+            <div class="fi">◎</div>
+            <div class="ft2">Intelligence, Not Just Data</div>
+            <p class="fd">Go beyond charts with allocation insights, risk exposure, drawdown scenarios, and performance analytics — built to help you understand how your portfolio behaves in real conditions.</p>
+        </div>
+        <div class="fc">
+            <div class="fi">⊡</div>
+            <div class="ft2">Private. Secure. Yours.</div>
+            <p class="fd">Your financial data stays fully encrypted and accessible only to you. Qavi is built as a private, invite-only platform with complete control in your hands.</p>
+        </div>
+        <div class="fc">
+            <div class="fi">◉</div>
+            <div class="ft2">Goal-Aligned Wealth Planning</div>
+            <p class="fd">Your portfolio isn't just tracked — it's structured around your ambitions. Understand how your assets support your long-term goals and where adjustments may be needed.</p>
+        </div>
+    </div>
+    <div class="fhero">
+        <div class="fhero-title">More than tracking. It's understanding.</div>
+        <div class="fhero-text">Most platforms show you what you own. Qavi helps you understand what it means.<br><br>By combining multi-asset tracking with intelligent analytics, Qavi gives you a clear picture of where you stand — and where you're headed.</div>
     </div>
     """, unsafe_allow_html=True)
 
