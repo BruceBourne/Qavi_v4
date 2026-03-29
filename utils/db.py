@@ -109,7 +109,7 @@ def decrypt_user(user: dict) -> dict:
     return out
 
 def get_all_advisors():
-    """Returns advisors + owners — both can act as advisors for clients."""
+    """Returns both advisors AND owners — owners have full advisor capabilities."""
     r = sb().table("users").select("id,full_name,username,email,role")\
             .in_("role", ["advisor","owner"]).execute()
     return r.data or []
@@ -312,16 +312,14 @@ def create_invoice(advisor_id, ac_id, fee_type, fee_value, fee_frequency,
 
 
 def get_invoices_for_client(client_user_id: str):
-    """
-    Get all invoices issued to a client.
-    Looks up the client's advisor_client records first, then fetches invoices.
-    """
+    """Get all invoices issued to a client via their advisor_client records."""
     try:
-        # Get all advisor_client records for this user
-        ac_rows = sb().table("advisor_clients").select("id").eq("client_id", client_user_id).execute().data or []
+        ac_rows = (sb().table("advisor_clients")
+                       .select("id")
+                       .eq("client_id", client_user_id)
+                       .execute().data or [])
         if not ac_rows: return []
         ac_ids = [r["id"] for r in ac_rows]
-        # Fetch invoices for all those advisor_client IDs
         all_invoices = []
         for ac_id in ac_ids:
             batch = (sb().table("invoices")
@@ -330,8 +328,7 @@ def get_invoices_for_client(client_user_id: str):
                         .order("invoice_date", desc=True)
                         .execute().data or [])
             all_invoices.extend(batch)
-        # Sort by date descending
-        all_invoices.sort(key=lambda x: x.get("invoice_date",""), reverse=True)
+        all_invoices.sort(key=lambda x: x.get("invoice_date", ""), reverse=True)
         return all_invoices
     except Exception:
         return []
