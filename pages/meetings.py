@@ -156,10 +156,13 @@ def render():
 
             advisor_opts = {}
             for a in advisors:
-                advisor_opts[a["advisor_id"]] = f"{title_case(a.get('advisor_name',''))} (your advisor)"
+                name = title_case(a.get("advisor_name","") or a.get("full_name",""))
+                advisor_opts[a["advisor_id"]] = f"{name} (your advisor)"
             for a in all_advisors:
                 if a["id"] not in advisor_opts:
-                    advisor_opts[a["id"]] = title_case(a.get("full_name","") or a["username"])
+                    name = title_case(a.get("full_name","") or a.get("username",""))
+                    role_label = " (Platform Owner)" if a.get("role") == "owner" else ""
+                    advisor_opts[a["id"]] = f"{name}{role_label}"
 
             if not advisor_opts:
                 st.info("No advisors registered yet."); return

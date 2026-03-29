@@ -4,7 +4,8 @@ import streamlit as st
 from utils.session import navigate
 from utils.db import (get_advisor_clients, get_client_advisors, get_portfolios_for_ac,
                       get_private_portfolios, get_portfolio_holdings, get_all_prices_map,
-                      rpc_portfolio_summary, create_portfolio, update_portfolio, delete_portfolio)
+                      rpc_portfolio_summary, create_portfolio, update_portfolio, delete_portfolio,
+                      get_all_advisors)
 from utils.crypto import inr, fmt_date, title_case, indian_format
 from datetime import date
 from collections import defaultdict
@@ -166,11 +167,21 @@ def render():
                 _pf_card(pf, "cli", pmap, show_edit=is_own)
         with tab2:
             st.caption("Private portfolios are visible only to you.")
-            if advisors:
-                ac_opts = {a["id"]: a.get("advisor_name", "Advisor") for a in advisors}
-                ac_sel  = st.selectbox("Under Advisor", list(ac_opts.keys()),
-                                       format_func=lambda x: ac_opts[x])
+            # Build advisor options: linked advisors first, then all owners/advisors
+            ac_opts = {}
+            for a in advisors:
+                name = title_case(a.get("advisor_name","") or a.get("full_name",""))
+                ac_opts[a["id"]] = f"{name} (your advisor)"
+            # Also include all advisors/owners so owner can always be selected
+            for a in get_all_advisors():
+                if a["id"] not in ac_opts:
+                    name = title_case(a.get("full_name","") or a.get("username",""))
+                    label = f"{name} (Platform Owner)" if a.get("role") == "owner" else name
+                    ac_opts[a["id"]] = label
+            if ac_opts:
+                ac_sel = st.selectbox("Under Advisor / Owner", list(ac_opts.keys()),
+                                      format_func=lambda x: ac_opts[x])
             else:
                 ac_sel = None
-                st.info("You have no linked advisor yet — portfolio will be fully private.")
+                st.info("No advisors registered yet — portfolio will be fully private.")
             _new_pf_form(ac_sel, user["id"], "client", ["private"], "cli")

@@ -174,12 +174,6 @@ def render():
 
         # ── Forgot Password ──
         with tab_reset:
-            st.markdown(
-                '<p style="font-size:.82rem;color:#8892AA;margin-bottom:.8rem">'
-                'Enter your registered email address. A reset token will be sent '
-                '<b style="color:#F0F4FF">privately to that email only</b> — '
-                'it will never appear on this page.</p>',
-                unsafe_allow_html=True)
 
             # Step 1: request
             if not st.session_state.get("_reset_sent"):
@@ -217,8 +211,7 @@ def render():
 
             # Step 2: paste token and set new password
             else:
-                st.info("📧 Check your email inbox for the reset token, then enter it below.")
-                if st.button("← Request a different email", key="reset_back"):
+                if st.button("← Use a different email", key="reset_back"):
                     st.session_state.pop("_reset_sent", None); st.rerun()
 
                 with st.form("do_reset"):
@@ -247,32 +240,65 @@ def render():
                                     st.session_state.pop("_reset_sent", None)
                                     st.success("✅ Password updated. Please sign in.")
 
-    # ══ RIGHT: feature cards ══
+    # ══ RIGHT: concise platform overview ══
     with right_col:
-        st.markdown(
-            '<div style="font-size:.68rem;color:#4E5A70;letter-spacing:.12em;'
-            'text-transform:uppercase;margin-bottom:.85rem;margin-top:.2rem">'
-            'What Qavi does for you</div>',
-            unsafe_allow_html=True)
+        st.markdown(f"""
+<div style="padding:.4rem 0 1.6rem 0">
+  <div style="font-size:.67rem;color:#4E5A70;letter-spacing:.14em;text-transform:uppercase;margin-bottom:1.4rem">
+    Portfolio Intelligence Platform
+  </div>
 
-        r1a, r1b = st.columns(2, gap="small")
-        r2a, r2b = st.columns(2, gap="small")
-        for col, (icon, title, text) in zip([r1a, r1b, r2a, r2b], CARDS):
-            col.markdown(_fcard(icon, title, text), unsafe_allow_html=True)
+  <div style="font-family:{_BF};font-style:italic;font-size:1.55rem;
+    color:#F0F4FF;line-height:1.3;margin-bottom:.8rem;font-weight:400">
+    Every asset. One place.<br>Complete clarity.
+  </div>
 
-        # Hero card
-        st.markdown(
-            f'<div style="background:linear-gradient(135deg,#12172B,#0D1220,#0A0F1A);'
-            f'border:1px solid #2E3850;border-radius:14px;padding:1.8rem 2rem;'
-            f'margin-top:.6rem;position:relative;overflow:hidden">'
-            f'<div style="position:absolute;top:0;left:0;right:0;height:2px;'
-            f'background:linear-gradient(90deg,transparent,#D4AF6A 40%,#4F7EFF 70%,transparent)"></div>'
-            f'<div style="font-family:{_BF};font-style:italic;font-size:1.15rem;'
-            f'color:#F0F4FF;margin-bottom:.75rem;line-height:1.3">'
-            f'More than tracking. It&rsquo;s understanding.</div>'
-            f'<div style="font-size:.83rem;color:#8892AA;line-height:1.85">'
-            f'Most platforms show you what you own. Qavi helps you understand what it means.'
-            f'<br><br>Combining multi-asset tracking with intelligent analytics — a clear picture '
-            f'of where you stand and where you&rsquo;re headed.</div>'
-            f'</div>',
-            unsafe_allow_html=True)
+  <div style="font-size:.84rem;color:#8892AA;line-height:1.9;margin-bottom:2rem;max-width:440px">
+    Qavi brings together equities, mutual funds, ETFs, bonds, gold and fixed
+    deposits into a single intelligent view — with P&L, allocation insights,
+    and performance analytics built for real investors.
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:.7rem">
+    <div style="display:flex;align-items:flex-start;gap:1rem">
+      <div style="width:32px;height:32px;border-radius:8px;background:#4F7EFF18;
+        border:1px solid #4F7EFF30;display:flex;align-items:center;justify-content:center;
+        flex-shrink:0;font-size:.9rem">◈</div>
+      <div>
+        <div style="font-size:.84rem;color:#C8D0E0;font-weight:600;margin-bottom:.15rem">Multi-asset tracking</div>
+        <div style="font-size:.78rem;color:#8892AA;line-height:1.6">Equities, MF, ETF, bonds, gold, FD — all in one portfolio view</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:1rem">
+      <div style="width:32px;height:32px;border-radius:8px;background:#2ECC7A18;
+        border:1px solid #2ECC7A30;display:flex;align-items:center;justify-content:center;
+        flex-shrink:0;font-size:.9rem">◎</div>
+      <div>
+        <div style="font-size:.84rem;color:#C8D0E0;font-weight:600;margin-bottom:.15rem">Intelligent analytics</div>
+        <div style="font-size:.78rem;color:#8892AA;line-height:1.6">Risk exposure, drawdown, Sharpe ratio, sector allocation</div>
+      </div>
+    </div>
+    <div style="display:flex;align-items:flex-start;gap:1rem">
+      <div style="width:32px;height:32px;border-radius:8px;background:#D4AF6A18;
+        border:1px solid #D4AF6A30;display:flex;align-items:center;justify-content:center;
+        flex-shrink:0;font-size:.9rem">⊡</div>
+      <div>
+        <div style="font-size:.84rem;color:#C8D0E0;font-weight:600;margin-bottom:.15rem">Private by design</div>
+        <div style="font-size:.78rem;color:#8892AA;line-height:1.6">Encrypted, invite-only, fully in your control</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="margin-top:2rem;padding:1.2rem 1.4rem;
+    background:linear-gradient(135deg,#0D1220,#0A0F1A);
+    border:1px solid #2E3850;border-radius:12px;position:relative;overflow:hidden">
+    <div style="position:absolute;top:0;left:0;right:0;height:1.5px;
+      background:linear-gradient(90deg,transparent,#D4AF6A 50%,transparent)"></div>
+    <div style="font-family:{_BF};font-style:italic;font-size:.98rem;
+      color:#D4AF6A;margin-bottom:.4rem">Invite-only platform</div>
+    <div style="font-size:.78rem;color:#8892AA;line-height:1.65">
+      Access is by invitation. Contact the platform owner or your advisor to request access.
+    </div>
+  </div>
+</div>
+""", unsafe_allow_html=True)

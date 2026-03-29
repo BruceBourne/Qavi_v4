@@ -22,7 +22,19 @@ def render():
     invoices = get_invoices_for_client(user["id"])
 
     if not invoices:
-        st.info("No invoices have been issued to your account yet.")
+        st.markdown("""
+        <div style="background:#161B27;border:1px solid #252D40;border-radius:12px;
+            padding:2rem 2.2rem;text-align:center;margin-top:1rem">
+            <div style="font-size:1.5rem;margin-bottom:.6rem;color:#4E5A70">🧾</div>
+            <div style="font-size:.92rem;color:#C8D0E0;font-weight:600;margin-bottom:.4rem">
+                No invoices yet
+            </div>
+            <div style="font-size:.81rem;color:#8892AA;line-height:1.75">
+                Your advisor will issue invoices here when applicable.<br>
+                This page will show all your billing history, amounts, and downloadable invoice PDFs.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
     # Summary metrics
