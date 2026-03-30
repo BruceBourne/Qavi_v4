@@ -167,17 +167,17 @@ def render():
                 _pf_card(pf, "cli", pmap, show_edit=is_own)
         with tab2:
             st.caption("Private portfolios are visible only to you.")
-            # Build advisor options: linked advisors first, then all owners/advisors
+            # Build advisor options — linked advisors first, then all advisors/owners
             ac_opts = {}
             for a in advisors:
-                name = title_case(a.get("advisor_name","") or a.get("full_name",""))
-                ac_opts[a["id"]] = f"{name} (your advisor)"
-            # Also include all advisors/owners so owner can always be selected
+                name = title_case(a.get("full_name","") or a.get("advisor_name",""))
+                if name and a.get("advisor_id"):
+                    ac_opts[a["advisor_id"]] = name
             for a in get_all_advisors():
                 if a["id"] not in ac_opts:
                     name = title_case(a.get("full_name","") or a.get("username",""))
-                    label = f"{name} (Platform Owner)" if a.get("role") == "owner" else name
-                    ac_opts[a["id"]] = label
+                    if name:
+                        ac_opts[a["id"]] = name
             if ac_opts:
                 ac_sel = st.selectbox("Under Advisor / Owner", list(ac_opts.keys()),
                                       format_func=lambda x: ac_opts[x])

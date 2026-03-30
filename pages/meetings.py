@@ -5,7 +5,7 @@ from utils.session import navigate
 from utils.db import (get_advisor_clients, get_meetings_for_advisor, get_meetings_for_client,
                       create_meeting, update_meeting_status, get_pending_requests_for_advisor,
                       approve_meeting_request, reject_meeting_request,
-                      create_meeting_request, get_all_advisors, get_client_advisors)
+                      create_meeting_request, get_all_advisors)
 from utils.crypto import fmt_date, title_case
 from datetime import date, timedelta
 
@@ -149,23 +149,20 @@ def render():
                 st.info("No meetings yet. Request one from the next tab.")
 
         with tab2:
-            advisors     = get_client_advisors(user["id"])
             all_advisors = get_all_advisors()
             st.markdown("#### Request a Meeting")
-            st.caption("You can request a meeting with any registered advisor — Mon–Fri, 9:00 AM to 6:00 PM only. Your advisor will confirm the time.")
+            st.caption("You can request a meeting with any advisor on the platform — Mon–Fri, 9:00 AM to 6:00 PM only. Your advisor will confirm the time.")
 
+            # Build advisor list from all registered advisors/owners
+            # No "your advisor" / "Platform Owner" labels — just names
             advisor_opts = {}
-            for a in advisors:
-                name = title_case(a.get("advisor_name","") or a.get("full_name",""))
-                advisor_opts[a["advisor_id"]] = f"{name} (your advisor)"
             for a in all_advisors:
-                if a["id"] not in advisor_opts:
-                    name = title_case(a.get("full_name","") or a.get("username",""))
-                    role_label = " (Platform Owner)" if a.get("role") == "owner" else ""
-                    advisor_opts[a["id"]] = f"{name}{role_label}"
+                name = title_case(a.get("full_name","") or a.get("username","") or a.get("email",""))
+                if name and a.get("id"):
+                    advisor_opts[a["id"]] = name
 
             if not advisor_opts:
-                st.info("No advisors registered yet."); return
+                st.info("No advisors registered on the platform yet."); return
 
             with st.form("request_form"):
                 adv_sel = st.selectbox("Advisor", list(advisor_opts.keys()),
