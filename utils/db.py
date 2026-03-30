@@ -125,8 +125,26 @@ def get_advisor_client(ac_id):
     return r.data[0] if r.data else None
 
 def get_client_advisors(user_id):
-    r = sb().table("advisor_clients").select("*").eq("client_id", user_id).execute()
-    return r.data or []
+    """
+    Returns advisor_clients rows for this client, enriched with the
+    advisor's full_name and role from the users table.
+    Returns list of dicts with: advisor_id, full_name, role, + all ac columns.
+    """
+    rows = sb().table("advisor_clients").select("*").eq("client_id", user_id).execute().data or []
+    if not rows:
+        return []
+    # Batch-fetch advisor names in one query
+    advisor_ids = list({r["advisor_id"] for r in rows if r.get("advisor_id")})
+    try:
+        users_r = sb().table("users").select("id,full_name,username,email,role")                      .in_("id", advisor_ids).execute().data or []
+        user_map = {u["id"]: u for u in users_r}
+    except Exception:
+        user_map = {}
+    for row in rows:
+        u = user_map.get(row.get("advisor_id"), {})
+        row["full_name"] = u.get("full_name","") or u.get("username","")
+        row["role"]      = u.get("role","advisor")
+    return rows
 
 def create_advisor_client(advisor_id, name, email, phone, pan, risk, notes, fee_type, fee_value, fee_freq):
     sb().table("advisor_clients").insert({
