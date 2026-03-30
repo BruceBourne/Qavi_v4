@@ -67,7 +67,7 @@ if user:
         if nc[7].button("Profile",  use_container_width=True, key="n_pr"):  navigate("profile")
     else:  # client
         if nc[5].button("Analysis", use_container_width=True, key="n_an"):  navigate("analysis")
-        nc[6].empty()
+        if nc[6].button("Invoices", use_container_width=True, key="n_inv"): navigate("client_invoices")
         if nc[7].button("Profile",  use_container_width=True, key="n_pr"):  navigate("profile")
 
     if nc[8].button("⏏", use_container_width=True, key="n_out", help="Sign Out"):
