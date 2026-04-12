@@ -3,36 +3,21 @@
 # Add secret APP_URL in: GitHub repo → Settings → Secrets and variables → Actions
 
 name: Keep Alive
-
+ 
 on:
   schedule:
-    - cron: "0 6 * * *"   # daily at 06:00 UTC (11:30 AM IST)
-  workflow_dispatch:       # manual trigger from Actions tab
-
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+ 
 jobs:
   ping:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping app
+      - name: Ping Qavi
         run: |
-          URL="${{ secrets.APP_URL }}"
-          if [ -z "$URL" ]; then
-            echo "APP_URL secret is not set."
-            exit 1
-          fi
-          echo "Pinging: $URL"
-          # --max-time 120: Streamlit cold-start can take 60-90s
-          # --retry 3: retry up to 3 times if it fails
-          # --retry-connrefused: also retry on connection refused (app still waking)
-          # --retry-max-time 360: total retry budget of 6 minutes
-          # exit 0 at end: never fail the workflow even if app is slow
-          curl -L \
-            --max-time 120 \
-            --retry 3 \
-            --retry-delay 15 \
-            --retry-connrefused \
-            --retry-max-time 360 \
-            --silent \
-            --output /dev/null \
+          curl -L --max-time 120 --retry 3 --retry-delay 15 \
+               --retry-connrefused --silent --output /dev/null \
+               https://qviv04.streamlit.app || true
+          echo "Done." /dev/null \
             "$URL" || true
           echo "Ping done."
