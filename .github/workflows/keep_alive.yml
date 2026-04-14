@@ -1,7 +1,3 @@
-# .github/workflows/keep_alive.yml
-# Pings the Qavi Streamlit app daily to prevent sleep.
-# Add secret APP_URL in: GitHub repo → Settings → Secrets and variables → Actions
-
 name: Keep Alive
  
 run: curl -L --silent --output /dev/null --max-time 120 https://qviv04.streamlit.app || true
