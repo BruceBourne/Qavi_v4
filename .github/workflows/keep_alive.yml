@@ -1,3 +1,17 @@
 name: Keep Alive
- 
-run: curl -L --silent --output /dev/null --max-time 120 https://qviv04.streamlit.app || true
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'
+  workflow_dispatch:
+
+jobs:
+  keep_alive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping app
+        run: curl -L --silent --output /dev/null --max-time 120 https://qviv04.streamlit.app || true
+      
+      - name: Log status
+        if: always()
+        run: echo "Keep-alive ping completed at $(date)"
