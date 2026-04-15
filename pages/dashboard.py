@@ -45,7 +45,7 @@ def render():
             st.warning(f"🔔 {len(pending)} pending meeting request(s). Go to **Meetings** to respond.")
 
         st.markdown("<br>", unsafe_allow_html=True)
-        b1, b2, b3, b4, b5 = st.columns(5)
+        b1, b2, b3, b4, b5, b6 = st.columns(6)
         if b1.button("👥 Clients",   use_container_width=True): navigate("clients")
         if b2.button("📁 Portfolios",use_container_width=True): navigate("portfolios")
         if b3.button("📊 Analysis",  use_container_width=True): navigate("analysis")
