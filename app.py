@@ -39,6 +39,7 @@ import pages.data_management  as data_management
 import pages.stock_enrichment as stock_enrichment
 import pages.owner            as owner
 import pages.feedback         as feedback
+import pages.report            as report
 import pages.client_invoices  as client_invoices
 
 init_session()
@@ -103,6 +104,7 @@ PAGES = {
     "stock_enrichment":   stock_enrichment,
     "owner":              owner,
     "feedback":           feedback,
+    "report":             report,
     "client_invoices":    client_invoices,
     "meetings":           meetings,
     "invoices":           invoices,
